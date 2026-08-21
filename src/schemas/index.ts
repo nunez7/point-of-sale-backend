@@ -118,6 +118,18 @@ export const updateUserSchema = z
     message: 'Debe enviar al menos un campo a actualizar',
   });
 
+export const storeUpdateSchema = z
+  .object({
+    name: z.string().min(1, 'El nombre es requerido').optional(),
+    code: z.string().min(1, 'La razón social es requerida').optional(),
+    address: z.string().max(255, 'Máximo 255 caracteres').optional().nullable(),
+    representante: z.string().max(120, 'Máximo 120 caracteres').optional().nullable(),
+    phone: z.string().max(30, 'Máximo 30 caracteres').optional().nullable(),
+  })
+  .refine((d) => Object.keys(d).length > 0, {
+    message: 'Debe enviar al menos un campo a actualizar',
+  });
+
 export const dailyReportSchema = z.object({
   storeId: z.string().min(1),
   date: z.string().optional(),

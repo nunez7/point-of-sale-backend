@@ -31,6 +31,8 @@ model Store {
   name      String
   code      String   @unique
   address   String?
+  representante String?
+  phone     String?
   saleSequence Int    @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

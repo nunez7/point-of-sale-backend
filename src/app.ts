@@ -11,6 +11,7 @@ import saleRoutes from './routes/sale.routes';
 import supplierRoutes from './routes/supplier.routes';
 import reportRoutes from './routes/report.routes';
 import userRoutes from './routes/user.routes';
+import storeRoutes from './routes/store.routes';
 
 export const app = express();
 
@@ -42,6 +43,7 @@ app.use('/api/sales', saleRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/stores', storeRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
