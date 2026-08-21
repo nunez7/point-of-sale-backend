@@ -10,6 +10,10 @@ export const idParamSchema = z.object({
   id: z.string().min(1),
 });
 
+export const storeIdParamSchema = z.object({
+  storeId: z.string().min(1, 'El identificador de la tienda es requerido'),
+});
+
 export const paymentMethodSchema = z.enum(
   Object.values(PaymentMethod) as [string, ...string[]]
 );

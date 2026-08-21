@@ -14,6 +14,7 @@ import {
   productUpdateSchema,
   productQuerySchema,
   idParamSchema,
+  storeIdParamSchema,
 } from '../schemas';
 import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
@@ -26,13 +27,13 @@ const router = Router();
 router.get(
   '/inventory/:storeId',
   requireAuth,
-  validate(idParamSchema, 'params'),
+  validate(storeIdParamSchema, 'params'),
   getInventory
 );
 router.get(
   '/low-stock/:storeId',
   requireAuth,
-  validate(idParamSchema, 'params'),
+  validate(storeIdParamSchema, 'params'),
   getLowStock
 );
 
