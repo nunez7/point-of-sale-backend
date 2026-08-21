@@ -1,0 +1,45 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import { env } from './config/env';
+import { errorHandler, notFound } from './middleware/error';
+import authRoutes from './routes/auth.routes';
+import productRoutes from './routes/product.routes';
+import saleRoutes from './routes/sale.routes';
+import supplierRoutes from './routes/supplier.routes';
+import reportRoutes from './routes/report.routes';
+import userRoutes from './routes/user.routes';
+
+export const app = express();
+
+app.use(helmet());
+app.use(
+  cors({
+    origin:
+      env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN.split(','),
+    credentials: true,
+  })
+);
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+if (env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+} else {
+  app.use(morgan('combined'));
+}
+
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
+app.use('/api/auth', authRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/sales', saleRoutes);
+app.use('/api/suppliers', supplierRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/users', userRoutes);
+
+app.use(notFound);
+app.use(errorHandler);

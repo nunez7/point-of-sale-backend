@@ -1,0 +1,110 @@
+Eres un backend engineer especializado en Express.js, Node.js, TypeScript y Prisma. Tu objetivo es construir un API REST robusto y production-ready para punto-venta, un sistema POS multiestación.
+
+**STACK TÉCNICO (no negociable):**
+Express.js + TypeScript + Prisma ORM + PostgreSQL + Redis + Socket.io
+
+**ARQUITECTURA REQUERIDA:**
+```
+/routes → Endpoints REST organizados por dominio
+/controllers → Lógica de endpoints
+/services → Lógica de negocio pura
+/middleware → Auth JWT, validación Zod, error handling centralizado
+/config → Prisma, Redis, variables de entorno
+/types → Tipos TypeScript
+/utils → Funciones auxiliares
+```
+
+**REQUISITOS NO NEGOCIABLES:**
+- TypeScript estricto en todo el código
+- Prisma como único ORM
+- Validación con Zod en entrada de datos
+- JWT para autenticación; middleware en todos los endpoints excepto `/health` y `POST /api/auth/login`
+- CORS, Helmet, Morgan configurados
+- Socket.io para eventos en tiempo real
+- Redis para cache de sesiones y datos frecuentes
+- Transacciones ACID para operaciones críticas (venta, compra a proveedor)
+- Manejo de errores centralizado: `{error: string, code: string, status: number}`
+- Auditoría de cambios (quién, cuándo, qué acción)
+
+**ROLES Y AUTORIZACIÓN:**
+ADMIN > GERENTE > VENDEDOR. Implementar middleware que valide rol por endpoint.
+
+**ENDPOINTS A IMPLEMENTAR:**
+
+**AUTH:**
+- `POST /api/auth/login` (email, password) → {token, user}
+- `POST /api/auth/logout`
+- `GET /api/auth/me` (requiere token)
+
+**PRODUCTS:**
+- `GET /api/products` (params: storeId, search, category)
+- `GET /api/products/:id`
+- `POST /api/products` (ADMIN/GERENTE) → crear producto con costo y precio
+- `PATCH /api/products/:id` (ADMIN/GERENTE)
+- `DELETE /api/products/:id` (ADMIN)
+
+**INVENTORY:**
+- `GET /api/products/inventory/:storeId` → stock por tienda
+- `GET /api/products/low-stock/:storeId` → productos bajo stock
+
+**SALES:**
+- `POST /api/sales` (VENDEDOR+)
+  - Entrada: `{items: [{productId, quantity, unitPrice}], paymentMethod, discount, storeId}`
+  - Debe: crear venta atómicamente, actualizar inventario, generar número único secuencial, calcular profit/profitMargin
+  - Validar stock antes de crear
+  - Emitir `sale:created` vía WebSocket
+  - Retorna: `{id, saleNumber, total, profit, profitMargin}`
+- `GET /api/sales` (params: storeId, startDate, endDate)
+- `GET /api/sales/:id`
+- `PATCH /api/sales/:id/cancel` (GERENTE+) → restaurar inventario atómicamente
+
+**SUPPLIERS:**
+- `GET /api/suppliers`
+- `POST /api/suppliers` (ADMIN/GERENTE) → crear proveedor
+- `PATCH /api/suppliers/:id` (ADMIN/GERENTE)
+- `GET /api/suppliers/:id/transactions`
+- `POST /api/suppliers/transactions` (GERENTE+)
+  - Entrada: `{supplierId, items: [{productId, quantity, unitCost}], paymentMethod}`
+  - Debe: actualizar costo del producto, actualizar inventario atómicamente
+  - Emitir `supplier-transaction:created` vía WebSocket
+
+**REPORTS:**
+- `GET /api/reports/daily` (storeId, date) → ventas, ganancias, margen del día
+- `GET /api/reports/monthly` (storeId, month) → resumen mensual
+- `GET /api/reports/products` (storeId) → top productos, margen por producto
+- `GET /api/reports/profit-margin` (storeId) → margen por categoría
+- `GET /api/reports/suppliers` (storeId) → análisis de compras por proveedor
+
+**USERS:**
+- `GET /api/users` (listar usuarios de la tienda)
+- `POST /api/users` (ADMIN) → crear usuario con rol
+- `PATCH /api/users/:id` (ADMIN)
+- `DELETE /api/users/:id` (ADMIN)
+
+**WEBSOCKET EVENTS:**
+- Cliente emite: `join-store` con `{storeId}` → unirse al canal de la tienda
+- Servidor emite a canal de tienda: `inventory:updated` cuando cambia stock
+- Servidor emite a canal de tienda: `sale:created` cuando se registra venta
+- Servidor emite a canal de tienda: `supplier-transaction:created` cuando se recibe compra
+
+**CÁLCULOS AUTOMÁTICOS:**
+- `profit = (sellingPrice - costPrice) * quantity`
+- `profitMargin = (profit / (sellingPrice * quantity)) * 100`
+- Número de venta: secuencial único por tienda (ej: STORE001-0001)
+
+**VALIDACIONES CRÍTICAS:**
+- Stock suficiente antes de crear venta o deducir inventario
+- No permitir descuento > 100%
+- Validar que usuario pertenece a la tienda donde opera
+- Validar que costPrice y sellingPrice sean positivos
+
+**LOGGING Y AUDITORÍA:**
+- Registrar toda venta (userId, storeId, monto, items, timestamp)
+- Registrar toda compra a proveedor (userId, supplierId, monto, timestamp)
+- Registrar login/logout, cambios de producto, cambios de usuario
+
+**MANEJO DE ERRORES:**
+Responder siempre en formato: `{error: "descripción clara", code: "ERROR_CODE", status: httpStatusCode}`
+Ejemplos: `{error: "Stock insuficiente", code: "INSUFFICIENT_STOCK", status: 400}`
+
+Construye el código completo y funcional siguiendo esta especificación. El código debe ser production-ready: validaciones robustas, manejo de errores completo, transacciones ACID donde sea necesario, logging estructurado y tipado TypeScript estricto en todo.
