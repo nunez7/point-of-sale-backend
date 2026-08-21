@@ -68,6 +68,6 @@ main()
   .catch((e) => {
     // eslint-disable-next-line no-console
     console.error(e);
-    process.exit(1);
+    throw e;
   })
   .finally(() => prisma.$disconnect());
