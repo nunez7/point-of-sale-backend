@@ -6,12 +6,18 @@ import { ApiError } from '../utils/ApiError';
 import { AuthedRequest } from '../types';
 
 export const listProducts = asyncHandler(async (req, res: Response) => {
-  const { storeId, search, category } = req.query as {
+  const { storeId, search, category, includeInactive } = req.query as {
     storeId?: string;
     search?: string;
     category?: string;
+    includeInactive?: string;
   };
-  const products = await productService.listProducts({ storeId, search, category });
+  const products = await productService.listProducts({
+    storeId,
+    search,
+    category,
+    includeInactive: includeInactive === 'true',
+  });
   res.json({ products });
 });
 

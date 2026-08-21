@@ -24,6 +24,7 @@ export const productSchema = z.object({
   storeId: z.string().min(1),
   costPrice: positiveDecimal,
   sellingPrice: positiveDecimal,
+  isActive: z.boolean().optional(),
 });
 
 export const productUpdateSchema = productSchema.partial();
@@ -32,6 +33,7 @@ export const productQuerySchema = z.object({
   storeId: z.string().optional(),
   search: z.string().optional(),
   category: z.string().optional(),
+  includeInactive: z.string().optional(),
 });
 
 export const categorySchema = z.object({

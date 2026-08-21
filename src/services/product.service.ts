@@ -51,10 +51,15 @@ export interface ProductFilters {
   storeId?: string;
   search?: string;
   category?: string;
+  includeInactive?: boolean;
 }
 
 export async function listProducts(filters: ProductFilters) {
-  const where: Record<string, unknown> = { isActive: true };
+  const where: Record<string, unknown> = {};
+
+  // Por defecto solo activos (catálogo de venta); el módulo de administración
+  // puede pedir también los inactivos para reactivarlos.
+  if (!filters.includeInactive) where.isActive = true;
 
   if (filters.storeId) where.storeId = filters.storeId;
   if (filters.search) {
@@ -95,6 +100,7 @@ export interface CreateProductInput {
   storeId: string;
   costPrice: number;
   sellingPrice: number;
+  isActive?: boolean;
 }
 
 export async function createProduct(data: CreateProductInput, userId: string) {
@@ -111,6 +117,7 @@ export async function createProduct(data: CreateProductInput, userId: string) {
           storeId: data.storeId,
           costPrice: data.costPrice,
           sellingPrice: data.sellingPrice,
+          isActive: data.isActive ?? true,
         },
         include: { category: true },
       });
@@ -161,6 +168,7 @@ export async function updateProduct(
         ...(data.categoryId !== undefined && { categoryId: data.categoryId ?? null }),
         ...(data.costPrice !== undefined && { costPrice: data.costPrice }),
         ...(data.sellingPrice !== undefined && { sellingPrice: data.sellingPrice }),
+        ...(data.isActive !== undefined && { isActive: data.isActive }),
       },
       include: { category: true },
     });
