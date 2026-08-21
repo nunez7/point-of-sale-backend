@@ -6,6 +6,7 @@ import { env } from './config/env';
 import { errorHandler, notFound } from './middleware/error';
 import authRoutes from './routes/auth.routes';
 import productRoutes from './routes/product.routes';
+import categoryRoutes from './routes/category.routes';
 import saleRoutes from './routes/sale.routes';
 import supplierRoutes from './routes/supplier.routes';
 import reportRoutes from './routes/report.routes';
@@ -36,6 +37,7 @@ app.get('/health', (_req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/categories', categoryRoutes);
 app.use('/api/sales', saleRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/reports', reportRoutes);

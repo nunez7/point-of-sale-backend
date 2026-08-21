@@ -34,6 +34,17 @@ export const productQuerySchema = z.object({
   category: z.string().optional(),
 });
 
+export const categorySchema = z.object({
+  name: z.string().min(1, 'El nombre es requerido'),
+  storeId: z.string().min(1),
+});
+
+export const categoryUpdateSchema = categorySchema
+  .partial()
+  .refine((d) => Object.keys(d).length > 0, {
+    message: 'Debe enviar al menos un campo a actualizar',
+  });
+
 export const saleItemSchema = z.object({
   productId: z.string().min(1),
   quantity: z.number().int('Cantidad debe ser entero').positive('Cantidad debe ser mayor a 0'),
