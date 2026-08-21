@@ -21,6 +21,11 @@ export const getProduct = asyncHandler(async (req, res: Response) => {
   res.json({ product });
 });
 
+export const getSiguienteCodigo = asyncAuthHandler(async (_req: AuthedRequest, res: Response) => {
+  const sku = await productService.obtenerSiguienteSku();
+  res.json({ sku });
+});
+
 export const createProduct = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
   const product = await productService.createProduct(req.body, req.user!.id);
   res.status(201).json({ product });

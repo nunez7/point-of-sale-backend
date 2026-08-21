@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   listProducts,
   getProduct,
+  getSiguienteCodigo,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -36,6 +37,8 @@ router.get(
 );
 
 router.get('/', requireAuth, validate(productQuerySchema, 'query'), listProducts);
+// Must be registered before /:id
+router.get('/siguiente-codigo', requireAuth, getSiguienteCodigo);
 router.get('/:id', requireAuth, validate(idParamSchema, 'params'), getProduct);
 
 router.post(
