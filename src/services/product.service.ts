@@ -47,11 +47,22 @@ function mapearErrorSkuDuplicado(error: unknown): unknown {
   return error;
 }
 
+export type ProductSortBy =
+  | 'name'
+  | 'category'
+  | 'sku'
+  | 'costPrice'
+  | 'sellingPrice';
+
 export interface ProductFilters {
   storeId?: string;
   search?: string;
   category?: string;
   includeInactive?: boolean;
+  page?: number;
+  limit?: number;
+  sortBy?: ProductSortBy;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export async function listProducts(filters: ProductFilters) {
@@ -66,20 +77,57 @@ export async function listProducts(filters: ProductFilters) {
     where.OR = [
       { name: { contains: filters.search, mode: 'insensitive' } },
       { sku: { contains: filters.search, mode: 'insensitive' } },
+      { description: { contains: filters.search, mode: 'insensitive' } },
     ];
   }
   if (filters.category) {
     where.category = { id: filters.category };
   }
 
-  return prisma.product.findMany({
+  const dir = filters.sortOrder ?? 'asc';
+  // Al ordenar por categoría se desempata por nombre para un listado estable.
+  const orderBy: Prisma.ProductOrderByWithRelationInput[] =
+    filters.sortBy === 'category'
+      ? [{ category: { name: dir } }, { name: 'asc' }]
+      : filters.sortBy === 'sku'
+        ? [{ sku: dir }]
+        : filters.sortBy === 'costPrice'
+          ? [{ costPrice: dir }]
+          : filters.sortBy === 'sellingPrice'
+            ? [{ sellingPrice: dir }]
+            : [{ name: dir }];
+
+  const baseArgs = {
     where,
     include: {
       category: true,
       inventories: { select: { storeId: true, quantity: true } },
     },
-    orderBy: { name: 'asc' },
-  });
+    orderBy,
+  };
+
+  // Sin `page` se devuelve el listado completo (POS, selects de compra).
+  if (!filters.page) {
+    return { products: await prisma.product.findMany(baseArgs) };
+  }
+
+  const limit = filters.limit ?? 50;
+  const [products, total] = await prisma.$transaction([
+    prisma.product.findMany({
+      ...baseArgs,
+      skip: (filters.page - 1) * limit,
+      take: limit,
+    }),
+    prisma.product.count({ where }),
+  ]);
+
+  return {
+    products,
+    total,
+    page: filters.page,
+    limit,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  };
 }
 
 export async function getProduct(id: string) {

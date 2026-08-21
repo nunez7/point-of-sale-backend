@@ -6,19 +6,31 @@ import { ApiError } from '../utils/ApiError';
 import { AuthedRequest } from '../types';
 
 export const listProducts = asyncHandler(async (req, res: Response) => {
-  const { storeId, search, category, includeInactive } = req.query as {
-    storeId?: string;
-    search?: string;
-    category?: string;
-    includeInactive?: string;
-  };
-  const products = await productService.listProducts({
+  const { storeId, search, category, includeInactive, page, limit, sortBy, sortOrder } =
+    req.query as {
+      storeId?: string;
+      search?: string;
+      category?: string;
+      includeInactive?: string;
+      page?: string;
+      limit?: string;
+      sortBy?: 'name' | 'category' | 'sku' | 'costPrice' | 'sellingPrice';
+      sortOrder?: 'asc' | 'desc';
+    };
+
+  const result = await productService.listProducts({
     storeId,
     search,
     category,
     includeInactive: includeInactive === 'true',
+    page: page ? Math.max(1, parseInt(page, 10) || 1) : undefined,
+    limit: limit
+      ? Math.min(200, Math.max(1, parseInt(limit, 10) || 50))
+      : undefined,
+    sortBy,
+    sortOrder,
   });
-  res.json({ products });
+  res.json(result);
 });
 
 export const getProduct = asyncHandler(async (req, res: Response) => {

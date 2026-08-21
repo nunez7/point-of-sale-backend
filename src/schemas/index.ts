@@ -34,6 +34,12 @@ export const productQuerySchema = z.object({
   search: z.string().optional(),
   category: z.string().optional(),
   includeInactive: z.string().optional(),
+  page: z.string().optional(),
+  limit: z.string().optional(),
+  sortBy: z
+    .enum(['name', 'category', 'sku', 'costPrice', 'sellingPrice'])
+    .optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
 });
 
 export const categorySchema = z.object({
