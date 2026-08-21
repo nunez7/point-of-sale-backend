@@ -244,11 +244,26 @@ export async function deleteProduct(id: string, userId: string) {
   const existing = await prisma.product.findUnique({ where: { id } });
   if (!existing) throw ApiError.notFound('Producto no encontrado', 'PRODUCT_NOT_FOUND');
 
-  const result = await prisma.$transaction(async (tx) => {
-    const deleted = await tx.product.update({
-      where: { id },
-      data: { isActive: false },
-    });
+  // El histórico de compras/ventas impide el borrado físico: se sugiere desactivar.
+  const compras = await prisma.supplierTransactionItem.count({ where: { productId: id } });
+  if (compras > 0) {
+    throw ApiError.conflict(
+      'No se puede eliminar el producto porque tiene compras registradas. Se sugiere desactivarlo.',
+      'PRODUCTO_CON_COMPRAS'
+    );
+  }
+
+  const ventas = await prisma.saleItem.count({ where: { productId: id } });
+  if (ventas > 0) {
+    throw ApiError.conflict(
+      'No se puede eliminar el producto porque tiene ventas registradas. Se sugiere desactivarlo.',
+      'PRODUCTO_CON_VENTAS'
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    // El inventario se elimina en cascada junto con el producto.
+    const deleted = await tx.product.delete({ where: { id } });
 
     await tx.auditLog.create({
       data: {
@@ -257,11 +272,10 @@ export async function deleteProduct(id: string, userId: string) {
         action: 'DELETE',
         entity: 'PRODUCT',
         entityId: deleted.id,
+        metadata: { name: deleted.name, sku: deleted.sku },
       },
     });
 
     return deleted;
   });
-
-  return result;
 }

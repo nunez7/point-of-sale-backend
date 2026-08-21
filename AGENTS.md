@@ -14,7 +14,7 @@ Express + TypeScript + Prisma + PostgreSQL + Socket.io POS multi-store backend. 
 
 ## Setup gotchas
 - `.env` is required at package root; `src/config/env.ts` validates it with zod and calls `process.exit(1)` on any missing var. Copy `.env.example` (PostgreSQL `DATABASE_URL`, `JWT_SECRET`). The example's `PORT=4000` is stale — the frontend expects this server on 3001 (`PORT=3001` in `.env`).
-- `tsconfig.json` declares a `@/*` path alias, but it is NOT used anywhere — all imports are relative. Do not introduce `@/` imports (ts-node-dev won't resolve them).
+- No hay path alias en `tsconfig.json` (`baseUrl`/`paths` se removieron por deprecación en TS 5.x+); todos los imports son relativos. No introducir imports `@/` (ts-node-dev no los resuelve).
 
 ## Architecture
 - Layering: `routes/` (thin) → `controllers/` → `services/` (pure business logic, ACID) → `prisma`. Schemas in `src/schemas/`, middleware in `src/middleware/`.
