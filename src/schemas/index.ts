@@ -130,6 +130,16 @@ export const storeUpdateSchema = z
     message: 'Debe enviar al menos un campo a actualizar',
   });
 
+export const updatePerfilSchema = z.object({
+  name: z.string().min(1, 'El nombre es requerido'),
+  email: z.string().email('Email inválido'),
+});
+
+export const cambiarPasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'La contraseña actual es requerida'),
+  newPassword: z.string().min(6, 'La nueva contraseña debe tener mínimo 6 caracteres'),
+});
+
 export const dailyReportSchema = z.object({
   storeId: z.string().min(1),
   date: z.string().optional(),

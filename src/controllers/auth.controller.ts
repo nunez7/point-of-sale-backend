@@ -22,3 +22,17 @@ export const me = asyncAuthHandler(async (req: AuthedRequest, res: Response) => 
   const user = await authService.getMe(req.user!.id);
   res.json({ user });
 });
+
+export const updateMe = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const { name, email } = req.body;
+  const user = await authService.updateMe(req.user!.id, { name, email });
+  res.json({ user, message: 'Perfil actualizado correctamente' });
+});
+
+export const changeMyPassword = asyncAuthHandler(
+  async (req: AuthedRequest, res: Response) => {
+    const { currentPassword, newPassword } = req.body;
+    await authService.changeMyPassword(req.user!.id, currentPassword, newPassword);
+    res.json({ message: 'Contraseña actualizada correctamente' });
+  }
+);

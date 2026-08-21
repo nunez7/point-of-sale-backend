@@ -109,3 +109,84 @@ export async function getMe(userId: string) {
 
   return user;
 }
+
+export async function updateMe(
+  userId: string,
+  data: { name: string; email: string }
+) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw ApiError.notFound('Usuario no encontrado', 'USER_NOT_FOUND');
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email: data.email } });
+  if (existing && existing.id !== userId) {
+    throw ApiError.conflict('El email ya está registrado', 'EMAIL_TAKEN');
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { name: data.name, email: data.email },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      storeId: true,
+      isActive: true,
+      createdAt: true,
+    },
+  });
+
+  await audit({
+    storeId: user.storeId,
+    userId: user.id,
+    action: 'UPDATE',
+    entity: 'USER',
+    entityId: user.id,
+    metadata: { changes: { name: data.name, email: data.email } },
+  });
+
+  return updated;
+}
+
+export async function changeMyPassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string
+) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw ApiError.notFound('Usuario no encontrado', 'USER_NOT_FOUND');
+  }
+
+  const valid = await bcrypt.compare(currentPassword, user.password);
+  if (!valid) {
+    throw ApiError.unauthorized(
+      'La contraseña actual es incorrecta',
+      'INVALID_CURRENT_PASSWORD'
+    );
+  }
+
+  if (currentPassword === newPassword) {
+    throw ApiError.badRequest(
+      'La nueva contraseña debe ser diferente a la actual',
+      'SAME_PASSWORD'
+    );
+  }
+
+  const hashed = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { password: hashed },
+  });
+
+  await audit({
+    storeId: user.storeId,
+    userId: user.id,
+    action: 'UPDATE',
+    entity: 'USER',
+    entityId: user.id,
+    metadata: { change: 'password' },
+  });
+}
