@@ -12,3 +12,15 @@ export const updateCurrentStore = asyncAuthHandler(async (req: AuthedRequest, re
   const store = await storeService.updateStore(req.user!.storeId, req.body, req.user!.id);
   res.json({ store });
 });
+
+export const updateDatosFiscalesStore = asyncAuthHandler(
+  async (req: AuthedRequest, res: Response) => {
+    const store = await storeService.updateStore(
+      req.user!.storeId,
+      req.body,
+      req.user!.id,
+      'UPDATE_DATOS_FISCALES'
+    );
+    res.json({ store, message: 'Datos fiscales del emisor actualizados' });
+  }
+);

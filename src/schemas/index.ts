@@ -118,6 +118,78 @@ export const updateUserSchema = z
     message: 'Debe enviar al menos un campo a actualizar',
   });
 
+// ---------- Facturación (CFDI) ----------
+
+// Catálogo c_RégimenFiscal del SAT
+export const REGIMENES_FISCALES = [
+  '601', '603', '605', '606', '607', '608', '610', '611', '612',
+  '614', '615', '616', '620', '621', '622', '623', '624', '625', '626',
+] as const;
+
+// Catálogo c_UsoCFDI del SAT
+export const USOS_CFDI = [
+  'G01', 'G02', 'G03', 'I01', 'I02', 'I03', 'I04', 'I05', 'I06', 'I07',
+  'I08', 'D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07', 'D08', 'D09',
+  'D10', 'CP01', 'CN01', 'S01',
+] as const;
+
+export const regimenFiscalSchema = z.enum(REGIMENES_FISCALES, {
+  errorMap: () => ({ message: 'Régimen fiscal inválido' }),
+});
+
+export const usoCfdiSchema = z.enum(USOS_CFDI, {
+  errorMap: () => ({ message: 'Uso del CFDI inválido' }),
+});
+
+export const rfcSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{2}[0-9A]$/, 'RFC inválido (formato: XXXX010101XXX)');
+
+export const codigoPostalSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{5}$/, 'El código postal debe tener 5 dígitos');
+
+export const clienteSchema = z.object({
+  rfc: rfcSchema,
+  nombreRazonSocial: z
+    .string()
+    .trim()
+    .min(1, 'El nombre o razón social es requerido')
+    .max(255, 'Máximo 255 caracteres'),
+  representanteLegal: z
+    .string()
+    .trim()
+    .max(255, 'Máximo 255 caracteres')
+    .optional()
+    .nullable(),
+  codigoPostal: codigoPostalSchema,
+  regimenFiscal: regimenFiscalSchema,
+  usoCfdi: usoCfdiSchema.optional().nullable(),
+  email: z.string().email('Email inválido').optional().nullable(),
+  phone: z.string().max(30, 'Máximo 30 caracteres').optional().nullable(),
+});
+
+export const clienteUpdateSchema = clienteSchema.partial();
+
+export const clienteQuerySchema = z.object({
+  search: z.string().optional(),
+});
+
+export const facturaCreateSchema = z
+  .object({
+    ventaId: z.string().min(1).optional(),
+    saleNumber: z.string().min(1).optional(),
+    clienteId: z.string().min(1, 'Debes seleccionar o registrar un cliente'),
+    // Por defecto, gastos en general
+    usoCfdi: usoCfdiSchema.default('G03'),
+  })
+  .refine((d) => Boolean(d.ventaId || d.saleNumber), {
+    message: 'Debe indicar la venta a facturar',
+  });
+
 export const storeUpdateSchema = z
   .object({
     name: z.string().min(1, 'El nombre es requerido').optional(),
@@ -125,6 +197,22 @@ export const storeUpdateSchema = z
     address: z.string().max(255, 'Máximo 255 caracteres').optional().nullable(),
     representante: z.string().max(120, 'Máximo 120 caracteres').optional().nullable(),
     phone: z.string().max(30, 'Máximo 30 caracteres').optional().nullable(),
+    rfc: rfcSchema.optional().nullable(),
+    regimenFiscal: regimenFiscalSchema.optional().nullable(),
+    codigoPostal: codigoPostalSchema.optional().nullable(),
+  })
+  .refine((d) => Object.keys(d).length > 0, {
+    message: 'Debe enviar al menos un campo a actualizar',
+  });
+
+// Datos fiscales del emisor; cualquier usuario autenticado puede
+// completarlos desde el formulario de facturación.
+export const storeFiscalesSchema = z
+  .object({
+    name: z.string().trim().min(1, 'El nombre o razón social es requerido').max(255).optional(),
+    rfc: rfcSchema.optional(),
+    regimenFiscal: regimenFiscalSchema.optional(),
+    codigoPostal: codigoPostalSchema.optional(),
   })
   .refine((d) => Object.keys(d).length > 0, {
     message: 'Debe enviar al menos un campo a actualizar',

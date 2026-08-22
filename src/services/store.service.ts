@@ -7,6 +7,9 @@ export type UpdateStoreInput = {
   address?: string | null;
   representante?: string | null;
   phone?: string | null;
+  rfc?: string | null;
+  regimenFiscal?: string | null;
+  codigoPostal?: string | null;
 }
 
 function mapearErrorCodigoDuplicado(error: unknown): unknown {
@@ -32,7 +35,12 @@ export async function getStoreById(id: string) {
   return store;
 }
 
-export async function updateStore(id: string, data: UpdateStoreInput, userId: string) {
+export async function updateStore(
+  id: string,
+  data: UpdateStoreInput,
+  userId: string,
+  action = 'UPDATE'
+) {
   const existing = await prisma.store.findUnique({ where: { id } });
   if (!existing) {
     throw ApiError.notFound('Tienda no encontrada', 'TIENDA_NOT_FOUND');
@@ -48,6 +56,9 @@ export async function updateStore(id: string, data: UpdateStoreInput, userId: st
           ...(data.address !== undefined && { address: data.address }),
           ...(data.representante !== undefined && { representante: data.representante }),
           ...(data.phone !== undefined && { phone: data.phone }),
+          ...(data.rfc !== undefined && { rfc: data.rfc }),
+          ...(data.regimenFiscal !== undefined && { regimenFiscal: data.regimenFiscal }),
+          ...(data.codigoPostal !== undefined && { codigoPostal: data.codigoPostal }),
         },
       });
 
@@ -55,7 +66,7 @@ export async function updateStore(id: string, data: UpdateStoreInput, userId: st
         data: {
           storeId: store.id,
           userId,
-          action: 'UPDATE',
+          action,
           entity: 'STORE',
           entityId: store.id,
           metadata: { changes: data },

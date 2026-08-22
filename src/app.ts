@@ -12,6 +12,8 @@ import supplierRoutes from './routes/supplier.routes';
 import reportRoutes from './routes/report.routes';
 import userRoutes from './routes/user.routes';
 import storeRoutes from './routes/store.routes';
+import clienteRoutes from './routes/cliente.routes';
+import facturaRoutes from './routes/factura.routes';
 
 export const app = express();
 
@@ -44,6 +46,8 @@ app.use('/api/suppliers', supplierRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/stores', storeRoutes);
+app.use('/api/clientes', clienteRoutes);
+app.use('/api/facturas', facturaRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
