@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { asyncHandler, asyncAuthHandler } from '../utils/asyncHandler';
 import * as supplierService from '../services/supplier.service';
-import { emitToStore } from '../socket/socket';
+import { emitToStore, emitToStoreExcept } from '../socket/socket';
 import { AuthedRequest } from '../types';
 
 export const listSuppliers = asyncHandler(async (req, res: Response) => {
@@ -40,12 +40,14 @@ export const createSupplierTransaction = asyncAuthHandler(
       paymentMethod,
     });
 
-    emitToStore(req.user!.storeId, 'supplier-transaction:created', {
+    // Se excluye el socket de la estación que registró la compra para no
+    // mostrarle el aviso de "otra estación".
+    emitToStoreExcept(req.user!.storeId, 'supplier-transaction:created', {
       id: transaction.id,
       supplierId: transaction.supplierId,
       total: Number(transaction.total),
       items: transaction.items.length,
-    });
+    }, req.headers['x-socket-id']);
     emitToStore(req.user!.storeId, 'inventory:updated', {
       storeId: req.user!.storeId,
       trigger: 'supplier-transaction',

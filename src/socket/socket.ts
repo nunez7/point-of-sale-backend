@@ -44,3 +44,18 @@ export function initSocket(server: HttpServer): Server {
 export function emitToStore(storeId: string, event: string, data: unknown): void {
   io?.to(`store:${storeId}`).emit(event, data);
 }
+
+// Emite a toda la sala de la tienda excepto al socket indicado (p. ej. la estación
+// que originó la acción), para no notificarle su propio evento. Acepta el valor crudo
+// del header 'x-socket-id' (string | string[] | undefined).
+export function emitToStoreExcept(
+  storeId: string,
+  event: string,
+  data: unknown,
+  exceptSocketId?: string | string[]
+): void {
+  if (!io) return;
+  const id = Array.isArray(exceptSocketId) ? exceptSocketId[0] : exceptSocketId;
+  const channel = io.to(`store:${storeId}`);
+  (id ? channel.except(id) : channel).emit(event, data);
+}

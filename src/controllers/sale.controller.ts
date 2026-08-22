@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { asyncHandler, asyncAuthHandler } from '../utils/asyncHandler';
 import * as saleService from '../services/sale.service';
-import { emitToStore } from '../socket/socket';
+import { emitToStore, emitToStoreExcept } from '../socket/socket';
 import { ApiError } from '../utils/ApiError';
 import { AuthedRequest } from '../types';
 
@@ -20,7 +20,9 @@ export const createSale = asyncAuthHandler(async (req: AuthedRequest, res: Respo
     discount: discount ?? 0,
   });
 
-  emitToStore(storeId, 'sale:created', result);
+  // Se excluye el socket de la estación que creó la venta para no mostrarle
+  // el aviso de "otra estación".
+  emitToStoreExcept(storeId, 'sale:created', result, req.headers['x-socket-id']);
   emitToStore(storeId, 'inventory:updated', { storeId, trigger: 'sale' });
 
   res.status(201).json(result);
