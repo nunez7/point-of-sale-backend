@@ -1,6 +1,7 @@
 import { prisma } from '../config/prisma';
 import { Prisma } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
+import { parseLocalDate } from '../utils/dates';
 
 type Tx = Prisma.TransactionClient;
 
@@ -167,9 +168,34 @@ export async function emitirFactura(input: EmitirFacturaInput) {
   });
 }
 
-export async function listarFacturas(storeId: string) {
+export interface FacturaFiltros {
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+}
+
+export async function listarFacturas(storeId: string, filtros?: FacturaFiltros) {
+  const where: Record<string, unknown> = { storeId };
+
+  if (filtros?.status) where.status = filtros.status;
+
+  if (filtros?.startDate || filtros?.endDate) {
+    const createdAt: Record<string, Date> = {};
+    if (filtros.startDate) {
+      const d = parseLocalDate(filtros.startDate);
+      d.setHours(0, 0, 0, 0);
+      createdAt.gte = d;
+    }
+    if (filtros.endDate) {
+      const d = parseLocalDate(filtros.endDate);
+      d.setHours(23, 59, 59, 999);
+      createdAt.lte = d;
+    }
+    if (Object.keys(createdAt).length) where.createdAt = createdAt;
+  }
+
   return prisma.factura.findMany({
-    where: { storeId },
+    where,
     include: {
       cliente: { select: { id: true, rfc: true, nombreRazonSocial: true } },
       sale: { select: { id: true, saleNumber: true } },

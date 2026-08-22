@@ -29,7 +29,16 @@ export const emitirFactura = asyncAuthHandler(async (req: AuthedRequest, res: Re
 });
 
 export const listarFacturas = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
-  const facturas = await facturaService.listarFacturas(req.user!.storeId);
+  const { startDate, endDate, status } = req.query as {
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+  };
+  const facturas = await facturaService.listarFacturas(req.user!.storeId, {
+    startDate,
+    endDate,
+    status,
+  });
   res.json({ facturas });
 });
 

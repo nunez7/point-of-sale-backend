@@ -6,7 +6,7 @@ import {
   obtenerFactura,
   cancelarFactura,
 } from '../controllers/factura.controller';
-import { facturaCreateSchema, idParamSchema } from '../schemas';
+import { facturaCreateSchema, facturaQuerySchema, idParamSchema } from '../schemas';
 import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/role';
@@ -16,7 +16,7 @@ const router = Router();
 
 // La emisión se hace desde el punto de venta cuando el cliente la solicita;
 // la cancelación queda reservada a GERENTE/ADMIN.
-router.get('/', requireAuth, listarFacturas);
+router.get('/', requireAuth, validate(facturaQuerySchema, 'query'), listarFacturas);
 router.get('/venta/:numero', requireAuth, buscarVenta);
 router.post(
   '/',

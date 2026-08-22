@@ -243,3 +243,23 @@ export const monthlyReportSchema = z.object({
   storeId: z.string().min(1),
   month: z.string().optional(),
 });
+
+// El corte de caja toma la tienda del token; solo acepta la fecha del día.
+export const corteCajaQuerySchema = z.object({
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe tener formato YYYY-MM-DD')
+    .optional(),
+});
+
+export const facturaQuerySchema = z.object({
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha inicial debe tener formato YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
+    .optional(),
+  status: z.enum(['EMITIDA', 'CANCELADA']).optional(),
+});

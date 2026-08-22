@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma';
+import { Prisma } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
 import { parseLocalDate } from '../utils/dates';
 
@@ -60,6 +61,76 @@ export async function dailyReport(storeId: string, date?: string) {
   };
 
   return result;
+}
+
+export async function corteCaja(storeId: string, date?: string) {
+  await validateStore(storeId);
+
+  const desde = startOfDay(date);
+  const hasta = endOfDay(date);
+
+  const sales = await prisma.sale.findMany({
+    where: {
+      storeId,
+      status: 'COMPLETED',
+      createdAt: { gte: desde, lte: hasta },
+    },
+    select: { total: true, discount: true, profit: true, paymentMethod: true },
+  });
+
+  let totalRevenue = new Prisma.Decimal(0);
+  let totalDiscount = new Prisma.Decimal(0);
+  let totalProfit = new Prisma.Decimal(0);
+  const byPayment = new Map<
+    string,
+    { count: number; total: Prisma.Decimal }
+  >();
+
+  for (const sale of sales) {
+    totalRevenue = totalRevenue.plus(sale.total);
+    totalDiscount = totalDiscount.plus(sale.discount);
+    totalProfit = totalProfit.plus(sale.profit);
+
+    const entry = byPayment.get(sale.paymentMethod) ?? {
+      count: 0,
+      total: new Prisma.Decimal(0),
+    };
+    entry.count += 1;
+    entry.total = entry.total.plus(sale.total);
+    byPayment.set(sale.paymentMethod, entry);
+  }
+
+  // Canceladas del día (por fecha de cancelación): no suman en totales,
+  // pero se reportan para conciliar el cierre.
+  const cancelledCount = await prisma.sale.count({
+    where: {
+      storeId,
+      status: 'CANCELED',
+      canceledAt: { gte: desde, lte: hasta },
+    },
+  });
+
+  const salesByPayment: Record<string, { count: number; total: number }> = {};
+  for (const [method, v] of byPayment.entries()) {
+    salesByPayment[method] = { count: v.count, total: Number(v.total) };
+  }
+
+  const revenue = Number(totalRevenue);
+  const count = sales.length;
+
+  return {
+    storeId,
+    date: localDateKey(desde),
+    generatedAt: new Date().toISOString(),
+    salesCount: count,
+    cancelledCount,
+    totalRevenue: revenue,
+    totalDiscount: Number(totalDiscount),
+    totalProfit: Number(totalProfit),
+    averageTicket: count > 0 ? revenue / count : 0,
+    cashExpected: salesByPayment.CASH?.total ?? 0,
+    salesByPayment,
+  };
 }
 
 export async function monthlyReport(storeId: string, month?: string) {
