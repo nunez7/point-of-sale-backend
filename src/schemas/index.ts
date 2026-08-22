@@ -172,10 +172,16 @@ export const clienteSchema = z.object({
   phone: z.string().max(30, 'Máximo 30 caracteres').optional().nullable(),
 });
 
-export const clienteUpdateSchema = clienteSchema.partial();
+export const clienteUpdateSchema = clienteSchema
+  .partial()
+  .extend({ isActive: z.boolean() })
+  .refine((d) => Object.keys(d).length > 0, {
+    message: 'Debe enviar al menos un campo a actualizar',
+  });
 
 export const clienteQuerySchema = z.object({
   search: z.string().optional(),
+  includeInactive: z.string().optional(),
 });
 
 export const facturaCreateSchema = z

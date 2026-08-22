@@ -13,7 +13,9 @@ export interface ClienteInput {
   phone?: string | null;
 }
 
-export type ClienteUpdateInput = Partial<ClienteInput>;
+export type ClienteUpdateInput = Partial<ClienteInput> & {
+  isActive?: boolean;
+};
 
 function mapearErrorRfcDuplicado(error: unknown): unknown {
   if (
@@ -30,8 +32,17 @@ function mapearErrorRfcDuplicado(error: unknown): unknown {
   return error;
 }
 
-export async function listarClientes(storeId: string, search?: string) {
-  const where: Record<string, unknown> = { storeId, isActive: true };
+export async function listarClientes(
+  storeId: string,
+  search?: string,
+  includeInactive?: boolean
+) {
+  const where: Record<string, unknown> = { storeId };
+  // Por defecto solo activos (catálogo de facturación); el catálogo de
+  // administración puede pedir también los inactivos para reactivarlos.
+  if (!includeInactive) {
+    where.isActive = true;
+  }
 
   const termino = search?.trim();
   if (termino) {
@@ -105,6 +116,7 @@ export async function actualizarCliente(
           ...(data.usoCfdi !== undefined && { usoCfdi: data.usoCfdi }),
           ...(data.email !== undefined && { email: data.email }),
           ...(data.phone !== undefined && { phone: data.phone }),
+          ...(data.isActive !== undefined && { isActive: data.isActive }),
         },
       });
 
@@ -132,11 +144,21 @@ export async function eliminarCliente(id: string, storeId: string, userId: strin
     throw ApiError.notFound('Cliente no encontrado', 'CLIENTE_NOT_FOUND');
   }
 
+  // El histórico fiscal impide el borrado: los clientes con facturas
+  // emitidas solo pueden desactivarse (PATCH con isActive: false).
+  const facturas = await prisma.factura.count({ where: { clienteId: id } });
+  if (facturas > 0) {
+    throw ApiError.conflict(
+      'No se puede eliminar el cliente porque tiene facturas emitidas. Se sugiere desactivarlo.',
+      'CLIENTE_CON_FACTURAS'
+    );
+  }
+
   return prisma.$transaction(async (tx) => {
-    // Borrado lógico: las facturas emitidas conservan la referencia al receptor.
-    const cliente = await tx.cliente.update({
+    // Borrado físico: solo llega aquí si no tiene facturas. Los clientes
+    // con facturas emitidas se bloquean arriba y solo pueden desactivarse.
+    const cliente = await tx.cliente.delete({
       where: { id },
-      data: { isActive: false },
     });
 
     await tx.auditLog.create({

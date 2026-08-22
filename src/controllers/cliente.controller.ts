@@ -4,8 +4,15 @@ import * as clienteService from '../services/cliente.service';
 import { AuthedRequest } from '../types';
 
 export const listarClientes = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
-  const { search } = req.query as { search?: string };
-  const clientes = await clienteService.listarClientes(req.user!.storeId, search);
+  const { search, includeInactive } = req.query as {
+    search?: string;
+    includeInactive?: string;
+  };
+  const clientes = await clienteService.listarClientes(
+    req.user!.storeId,
+    search,
+    includeInactive === 'true'
+  );
   res.json({ clientes });
 });
 
