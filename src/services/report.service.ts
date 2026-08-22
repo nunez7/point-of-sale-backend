@@ -1,16 +1,15 @@
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
+import { parseLocalDate } from '../utils/dates';
 
 function startOfDay(dateStr?: string): Date {
-  const base = dateStr ? new Date(dateStr) : new Date();
-  if (isNaN(base.getTime())) throw ApiError.badRequest('Fecha inválida', 'INVALID_DATE');
+  const base = dateStr ? parseLocalDate(dateStr) : new Date();
   base.setHours(0, 0, 0, 0);
   return base;
 }
 
 function endOfDay(dateStr?: string): Date {
-  const base = dateStr ? new Date(dateStr) : new Date();
-  if (isNaN(base.getTime())) throw ApiError.badRequest('Fecha inválida', 'INVALID_DATE');
+  const base = dateStr ? parseLocalDate(dateStr) : new Date();
   base.setHours(23, 59, 59, 999);
   return base;
 }
@@ -43,14 +42,21 @@ export async function dailyReport(storeId: string, date?: string) {
   const count = sales.length;
   const profitMargin = totalSales > 0 ? (totalProfit / totalSales) * 100 : 0;
 
+  const salesByPayment: Record<string, number> = { CASH: 0, CARD: 0 };
+  for (const sale of sales) {
+    salesByPayment[sale.paymentMethod] =
+      (salesByPayment[sale.paymentMethod] ?? 0) + Number(sale.total);
+  }
+
   const result = {
     storeId,
     date: startOfDay(date).toISOString().slice(0, 10),
     salesCount: count,
-    totalSales,
+    totalRevenue: totalSales,
     totalProfit,
     profitMargin,
     averageTicket: count > 0 ? totalSales / count : 0,
+    salesByPayment,
   };
 
   return result;

@@ -2,6 +2,7 @@ import { prisma } from '../config/prisma';
 import { Prisma, PaymentMethod } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
 import { SaleItemInput } from '../types';
+import { parseLocalDate } from '../utils/dates';
 
 export interface CreateSaleInput {
   storeId: string;
@@ -178,6 +179,39 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
   });
 }
 
+// Los Decimal de Prisma se serializan como string en JSON; el frontend espera
+// números (p. ej. profitMargin.toFixed()). Convertimos al borde del servicio
+// preservando las relaciones incluidas (items, product, user).
+function serializeSale<
+  T extends {
+    total: Prisma.Decimal | number;
+    subtotal: Prisma.Decimal | number;
+    discount: Prisma.Decimal | number;
+    profit: Prisma.Decimal | number;
+    profitMargin: Prisma.Decimal | number;
+    items: Array<{
+      unitPrice: Prisma.Decimal | number;
+      costPrice: Prisma.Decimal | number;
+      profit: Prisma.Decimal | number;
+    }>;
+  },
+>(sale: T) {
+  return {
+    ...sale,
+    total: Number(sale.total),
+    subtotal: Number(sale.subtotal),
+    discount: Number(sale.discount),
+    profit: Number(sale.profit),
+    profitMargin: Number(sale.profitMargin),
+    items: sale.items.map((it) => ({
+      ...it,
+      unitPrice: Number(it.unitPrice),
+      costPrice: Number(it.costPrice),
+      profit: Number(it.profit),
+    })),
+  };
+}
+
 export async function listSales(filters: {
   storeId?: string;
   startDate?: string;
@@ -190,17 +224,19 @@ export async function listSales(filters: {
   if (filters.startDate || filters.endDate) {
     const createdAt: Record<string, Date> = {};
     if (filters.startDate) {
-      const d = new Date(filters.startDate);
-      if (!isNaN(d.getTime())) createdAt.gte = d;
+      const d = parseLocalDate(filters.startDate);
+      d.setHours(0, 0, 0, 0);
+      createdAt.gte = d;
     }
     if (filters.endDate) {
-      const d = new Date(filters.endDate);
-      if (!isNaN(d.getTime())) createdAt.lte = d;
+      const d = parseLocalDate(filters.endDate);
+      d.setHours(23, 59, 59, 999);
+      createdAt.lte = d;
     }
     if (Object.keys(createdAt).length) where.createdAt = createdAt;
   }
 
-  return prisma.sale.findMany({
+  const sales = await prisma.sale.findMany({
     where,
     include: {
       items: { include: { product: true } },
@@ -208,16 +244,20 @@ export async function listSales(filters: {
     },
     orderBy: { createdAt: 'desc' },
   });
+
+  return sales.map(serializeSale);
 }
 
 export async function getSale(id: string, storeId: string) {
-  return prisma.sale.findFirst({
+  const sale = await prisma.sale.findFirst({
     where: { id, storeId },
     include: {
       items: { include: { product: { include: { category: true } } } },
       user: { select: { id: true, name: true, email: true } },
     },
   });
+
+  return sale ? serializeSale(sale) : null;
 }
 
 export async function cancelSale(id: string, storeId: string, userId: string) {
