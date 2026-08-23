@@ -26,7 +26,7 @@ export async function obtenerSiguienteSku(): Promise<string> {
   return formatearSku(await siguienteConsecutivo(prisma));
 }
 
-async function generarSkuAutomatico(tx: Prisma.TransactionClient): Promise<string> {
+export async function generarSkuAutomatico(tx: Prisma.TransactionClient): Promise<string> {
   let consecutivo = await siguienteConsecutivo(tx);
   let sku = formatearSku(consecutivo);
   // Avanza si el código ya fue tomado (ej. códigos de barras manuales)
