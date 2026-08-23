@@ -36,6 +36,15 @@ enum UnidadVenta {
   VOLUMEN
 }
 
+enum CancellationReason {
+  ERROR_FACTURACION
+  CLIENTE_PROVEEDOR_SOLICITA
+  DUPLICADA
+  DEVOLUCION_MERCANCIA
+  CANCELACION_PEDIDO
+  OTRO
+}
+
 model Store {
   id        String   @id @default(cuid())
   name      String
@@ -61,6 +70,7 @@ model Store {
   suppliers      Supplier[]
   clientes       Cliente[]
   facturas       Factura[]
+  cancellations  Cancellation[]
 }
 
 model User {
@@ -81,6 +91,7 @@ model User {
   auditLogs        AuditLog[]
   revokedTokens    RevokedToken[]
   facturas         Factura[]
+  cancellations    Cancellation[]
 }
 
 model RevokedToken {
@@ -161,6 +172,8 @@ model Sale {
   status      String        @default("COMPLETED")
   canceledAt  DateTime?
   canceledBy  String?
+  cancellationReason  CancellationReason?
+  cancellationComment String?
   createdAt   DateTime      @default(now())
 
   factura Factura?
@@ -212,6 +225,10 @@ model SupplierTransaction {
   paymentMethod PaymentMethod
   total         Decimal                      @db.Decimal(12, 2)
   status        String                       @default("COMPLETED")
+  canceledAt    DateTime?
+  canceledBy    String?
+  cancellationReason  CancellationReason?
+  cancellationComment String?
   createdAt     DateTime                     @default(now())
 
   @@index([storeId, createdAt])
@@ -295,8 +312,30 @@ model Factura {
   status   String  @default("EMITIDA")
   canceledAt DateTime?
   canceledBy String?
+  cancellationReason  CancellationReason?
+  cancellationComment String?
   createdAt DateTime @default(now())
 
   @@index([storeId, createdAt])
   @@index([clienteId])
+}
+
+model Cancellation {
+  id            String   @id @default(cuid())
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  entityType    String
+  entityId      String
+  entityNumber  String
+
+  reason        CancellationReason
+  comment       String?
+
+  createdAt     DateTime @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([entityType, entityId])
 }

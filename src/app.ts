@@ -14,6 +14,7 @@ import userRoutes from './routes/user.routes';
 import storeRoutes from './routes/store.routes';
 import clienteRoutes from './routes/cliente.routes';
 import facturaRoutes from './routes/factura.routes';
+import cancelRoutes from './routes/cancel.routes';
 
 export const app = express();
 
@@ -48,6 +49,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/stores', storeRoutes);
 app.use('/api/clientes', clienteRoutes);
 app.use('/api/facturas', facturaRoutes);
+app.use('/api/cancellations', cancelRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

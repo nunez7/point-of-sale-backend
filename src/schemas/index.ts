@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaymentMethod, Role, UnidadVenta } from '@prisma/client';
+import { PaymentMethod, Role, UnidadVenta, CancellationReason } from '@prisma/client';
 
 export const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -279,4 +279,57 @@ export const facturaQuerySchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
     .optional(),
   status: z.enum(['EMITIDA', 'CANCELADA']).optional(),
+});
+
+// ---------- Cancelaciones ----------
+
+export const CANCELLATION_REASONS = Object.values(CancellationReason) as [
+  CancellationReason,
+  ...CancellationReason[],
+];
+
+export const cancelEntitySchema = z.object({
+  entityType: z.enum(['SALE', 'FACTURA', 'SUPPLIER_TRANSACTION'], {
+    errorMap: () => ({ message: 'Tipo de entidad inválido. Use: SALE, FACTURA o SUPPLIER_TRANSACTION' }),
+  }),
+  entityCode: z.string().min(1, 'El código o número del documento es requerido'),
+});
+
+export const cancelConfirmSchema = z.object({
+  entityType: z.enum(['SALE', 'FACTURA', 'SUPPLIER_TRANSACTION'], {
+    errorMap: () => ({ message: 'Tipo de entidad inválido. Use: SALE, FACTURA o SUPPLIER_TRANSACTION' }),
+  }),
+  entityId: z.string().min(1, 'El ID del documento es requerido'),
+  reason: z.nativeEnum(CancellationReason, {
+    errorMap: () => ({ message: 'Motivo de cancelación inválido' }),
+  }),
+  comment: z
+    .string()
+    .max(500, 'Máximo 500 caracteres')
+    .optional()
+    .nullable(),
+}).refine(
+  (data) => {
+    if (data.reason === 'OTRO' && (!data.comment || data.comment.trim().length === 0)) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: 'Al seleccionar "OTRO" como motivo, el comentario es obligatorio',
+    path: ['comment'],
+  }
+);
+
+export const cancelationsQuerySchema = z.object({
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha inicial debe tener formato YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
+    .optional(),
+  entityType: z.enum(['SALE', 'FACTURA', 'SUPPLIER_TRANSACTION']).optional(),
+  reason: z.nativeEnum(CancellationReason).optional(),
 });

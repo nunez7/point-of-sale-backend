@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma';
-import { Prisma, PaymentMethod } from '@prisma/client';
+import { Prisma, PaymentMethod, CancellationReason } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
 import { SupplierTxItemInput } from '../types';
 
@@ -202,5 +202,89 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
     });
 
     return transaction;
+  });
+}
+
+export async function cancelSupplierTransaction(
+  id: string,
+  storeId: string,
+  userId: string,
+  reason?: CancellationReason,
+  comment?: string | null
+) {
+  return prisma.$transaction(async (tx) => {
+    const txRecord = await tx.supplierTransaction.findFirst({
+      where: { id, storeId, status: 'COMPLETED' },
+      include: { items: true },
+    });
+    if (!txRecord) {
+      throw ApiError.notFound(
+        'Compra a proveedor no encontrada o ya cancelada',
+        'SUPPLIER_TX_NOT_FOUND'
+      );
+    }
+
+    // Restore inventory (subtract what was added)
+    for (const item of txRecord.items) {
+      const inventory = await tx.inventory.findUnique({
+        where: { storeId_productId: { storeId, productId: item.productId } },
+      });
+      if (inventory) {
+        const newQty = inventory.quantity.minus(item.quantity);
+        if (newQty.lessThan(0)) {
+          throw ApiError.badRequest(
+            'No se puede cancelar: el producto tendría stock negativo',
+            'INSUFFICIENT_STOCK_TO_CANCEL'
+          );
+        }
+        await tx.inventory.update({
+          where: { storeId_productId: { storeId, productId: item.productId } },
+          data: { quantity: { decrement: item.quantity } },
+        });
+      }
+    }
+
+    const canceled = await tx.supplierTransaction.update({
+      where: { id },
+      data: {
+        status: 'CANCELED',
+        canceledAt: new Date(),
+        canceledBy: userId,
+        ...(reason && { cancellationReason: reason }),
+        ...(comment !== undefined && { cancellationComment: comment }),
+      },
+    });
+
+    // Create Cancellation record if reason provided
+    if (reason) {
+      await tx.cancellation.create({
+        data: {
+          storeId,
+          userId,
+          entityType: 'SUPPLIER_TRANSACTION',
+          entityId: id,
+          entityNumber: id,
+          reason,
+          comment: comment ?? null,
+        },
+      });
+    }
+
+    await tx.auditLog.create({
+      data: {
+        storeId,
+        userId,
+        action: 'CANCEL_SUPPLIER_TX',
+        entity: 'SUPPLIER_TRANSACTION',
+        entityId: id,
+        metadata: {
+          total: txRecord.total.toString(),
+          ...(reason && { reason }),
+          ...(comment && { comment }),
+        },
+      },
+    });
+
+    return canceled;
   });
 }

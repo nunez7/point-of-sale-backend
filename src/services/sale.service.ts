@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma';
-import { Prisma, PaymentMethod } from '@prisma/client';
+import { Prisma, PaymentMethod, CancellationReason } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
 import { SaleItemInput } from '../types';
 import { parseLocalDate } from '../utils/dates';
@@ -289,7 +289,13 @@ export async function getSale(id: string, storeId: string) {
   return sale ? serializeSale(sale) : null;
 }
 
-export async function cancelSale(id: string, storeId: string, userId: string) {
+export async function cancelSale(
+  id: string,
+  storeId: string,
+  userId: string,
+  reason?: CancellationReason,
+  comment?: string | null
+) {
   return prisma.$transaction(async (tx) => {
     const sale = await tx.sale.findFirst({
       where: { id, storeId, status: 'COMPLETED' },
@@ -319,8 +325,25 @@ export async function cancelSale(id: string, storeId: string, userId: string) {
         status: 'CANCELED',
         canceledAt: new Date(),
         canceledBy: userId,
+        ...(reason && { cancellationReason: reason }),
+        ...(comment !== undefined && { cancellationComment: comment }),
       },
     });
+
+    // Create Cancellation record if reason provided
+    if (reason) {
+      await tx.cancellation.create({
+        data: {
+          storeId,
+          userId,
+          entityType: 'SALE',
+          entityId: id,
+          entityNumber: sale.saleNumber,
+          reason,
+          comment: comment ?? null,
+        },
+      });
+    }
 
     await tx.auditLog.create({
       data: {
@@ -329,7 +352,11 @@ export async function cancelSale(id: string, storeId: string, userId: string) {
         action: 'CANCEL_SALE',
         entity: 'SALE',
         entityId: id,
-        metadata: { saleNumber: sale.saleNumber },
+        metadata: {
+          saleNumber: sale.saleNumber,
+          ...(reason && { reason }),
+          ...(comment && { comment }),
+        },
       },
     });
 

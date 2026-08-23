@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma';
-import { Prisma } from '@prisma/client';
+import { Prisma, CancellationReason } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
 import { parseLocalDate } from '../utils/dates';
 
@@ -247,7 +247,13 @@ export async function obtenerFactura(id: string, storeId: string) {
   };
 }
 
-export async function cancelarFactura(id: string, storeId: string, userId: string) {
+export async function cancelarFactura(
+  id: string,
+  storeId: string,
+  userId: string,
+  reason?: CancellationReason,
+  comment?: string | null
+) {
   return prisma.$transaction(async (tx) => {
     const factura = await tx.factura.findFirst({
       where: { id, storeId, status: 'EMITIDA' },
@@ -258,8 +264,29 @@ export async function cancelarFactura(id: string, storeId: string, userId: strin
 
     const cancelada = await tx.factura.update({
       where: { id },
-      data: { status: 'CANCELADA', canceledAt: new Date(), canceledBy: userId },
+      data: {
+        status: 'CANCELADA',
+        canceledAt: new Date(),
+        canceledBy: userId,
+        ...(reason && { cancellationReason: reason }),
+        ...(comment !== undefined && { cancellationComment: comment }),
+      },
     });
+
+    // Create Cancellation record if reason provided
+    if (reason) {
+      await tx.cancellation.create({
+        data: {
+          storeId,
+          userId,
+          entityType: 'FACTURA',
+          entityId: id,
+          entityNumber: factura.folio,
+          reason,
+          comment: comment ?? null,
+        },
+      });
+    }
 
     await tx.auditLog.create({
       data: {
@@ -268,7 +295,11 @@ export async function cancelarFactura(id: string, storeId: string, userId: strin
         action: 'CANCEL_FACTURA',
         entity: 'FACTURA',
         entityId: id,
-        metadata: { folio: factura.folio },
+        metadata: {
+          folio: factura.folio,
+          ...(reason && { reason }),
+          ...(comment && { comment }),
+        },
       },
     });
 
