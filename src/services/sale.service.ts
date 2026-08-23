@@ -289,6 +289,15 @@ export async function getSale(id: string, storeId: string) {
   return sale ? serializeSale(sale) : null;
 }
 
+export async function getSaleBySaleNumber(storeId: string, saleNumber: string) {
+  const sale = await prisma.sale.findFirst({
+    where: { saleNumber, storeId, status: 'COMPLETED' },
+    include: { items: { include: { product: { include: { category: true } } } } },
+  });
+
+  return sale ? serializeSale(sale) : null;
+}
+
 export async function cancelSale(
   id: string,
   storeId: string,

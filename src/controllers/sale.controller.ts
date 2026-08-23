@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { asyncHandler, asyncAuthHandler } from '../utils/asyncHandler';
+import { asyncAuthHandler, asyncHandler } from '../utils/asyncHandler';
 import * as saleService from '../services/sale.service';
 import { emitToStore, emitToStoreExcept } from '../socket/socket';
 import { ApiError } from '../utils/ApiError';
@@ -51,4 +51,11 @@ export const cancelSale = asyncAuthHandler(async (req: AuthedRequest, res: Respo
     trigger: 'sale:canceled',
   });
   res.json({ sale, message: 'Venta cancelada e inventario restaurado' });
+});
+
+export const lookupSale = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const { saleNumber } = req.query as { saleNumber: string };
+  const sale = await saleService.getSaleBySaleNumber(req.user!.storeId, saleNumber);
+  if (!sale) throw ApiError.notFound('Venta no encontrada', 'SALE_NOT_FOUND');
+  res.json({ sale });
 });

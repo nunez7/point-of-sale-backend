@@ -63,19 +63,25 @@ export async function dailyReport(storeId: string, date?: string) {
   return result;
 }
 
-export async function corteCaja(storeId: string, date?: string) {
+export async function corteCaja(storeId: string, date?: string, operatorId?: string) {
   await validateStore(storeId);
 
   const desde = startOfDay(date);
   const hasta = endOfDay(date);
 
+  const where: Prisma.SaleWhereInput = {
+    storeId,
+    status: 'COMPLETED',
+    createdAt: { gte: desde, lte: hasta },
+  };
+
+  if (operatorId) {
+    where.userId = operatorId;
+  }
+
   const sales = await prisma.sale.findMany({
-    where: {
-      storeId,
-      status: 'COMPLETED',
-      createdAt: { gte: desde, lte: hasta },
-    },
-    select: { total: true, discount: true, profit: true, paymentMethod: true },
+    where,
+    include: { items: { include: { product: { include: { category: true } } } } },
   });
 
   let totalRevenue = new Prisma.Decimal(0);
@@ -110,6 +116,28 @@ export async function corteCaja(storeId: string, date?: string) {
     },
   });
 
+  // Canceladas del día por operador
+  const cancelledCountByOperator = operatorId
+    ? await prisma.sale.count({
+        where: {
+          storeId,
+          status: 'CANCELED',
+          userId: operatorId,
+          canceledAt: { gte: desde, lte: hasta },
+        },
+      })
+    : cancelledCount;
+
+  // Group by hour
+  const byHour = new Map<number, { count: number; totalRevenue: number }>();
+  for (const sale of sales) {
+    const hour = sale.createdAt.getHours();
+    const entry = byHour.get(hour) ?? { count: 0, totalRevenue: 0 };
+    entry.count += 1;
+    entry.totalRevenue += Number(sale.total);
+    byHour.set(hour, entry);
+  }
+
   const salesByPayment: Record<string, { count: number; total: number }> = {};
   for (const [method, v] of byPayment.entries()) {
     salesByPayment[method] = { count: v.count, total: Number(v.total) };
@@ -124,12 +152,20 @@ export async function corteCaja(storeId: string, date?: string) {
     generatedAt: new Date().toISOString(),
     salesCount: count,
     cancelledCount,
+    cancelledCountByOperator,
     totalRevenue: revenue,
     totalDiscount: Number(totalDiscount),
     totalProfit: Number(totalProfit),
     averageTicket: count > 0 ? revenue / count : 0,
     cashExpected: salesByPayment.CASH?.total ?? 0,
     salesByPayment,
+    byHour: Array.from(byHour.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([hour, v]) => ({
+        hour,
+        count: v.count,
+        totalRevenue: Number(v.totalRevenue),
+      })),
   };
 }
 

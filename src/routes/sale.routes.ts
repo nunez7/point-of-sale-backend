@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { createSale, listSales, getSale, cancelSale } from '../controllers/sale.controller';
-import { saleSchema, saleQuerySchema, idParamSchema } from '../schemas';
+import { createSale, listSales, getSale, cancelSale, lookupSale } from '../controllers/sale.controller';
+import { saleSchema, saleQuerySchema, idParamSchema, saleLookupSchema } from '../schemas';
 import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/role';
@@ -24,5 +24,6 @@ router.patch(
   validate(idParamSchema, 'params'),
   cancelSale
 );
+router.get('/lookup', requireAuth, validate(saleLookupSchema, 'query'), lookupSale);
 
 export default router;

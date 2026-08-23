@@ -261,6 +261,11 @@ export const monthlyReportSchema = z.object({
   month: z.string().optional(),
 });
 
+// Buscar venta por número de ticket
+export const saleLookupSchema = z.object({
+  saleNumber: z.string().trim().toUpperCase(),
+});
+
 // El corte de caja toma la tienda del token; solo acepta la fecha del día.
 export const corteCajaQuerySchema = z.object({
   date: z
