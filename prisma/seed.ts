@@ -55,10 +55,11 @@ async function main() {
     costPrice: number;
     sellingPrice: number;
     stock: number;
+    sortOrder: number;
   }) {
     const creado = await prisma.product.upsert({
       where: { sku: p.sku },
-      update: {},
+      update: { sortOrder: p.sortOrder },
       create: {
         name: p.name,
         sku: p.sku,
@@ -69,6 +70,7 @@ async function main() {
         categoryId: categories[p.categoryIndex].id,
         costPrice: p.costPrice,
         sellingPrice: p.sellingPrice,
+        sortOrder: p.sortOrder,
       },
     });
     await prisma.inventory.upsert({
@@ -89,21 +91,21 @@ async function main() {
 
   // ─── LÁCTEOS (15) — categoría[4] ──────────────────────────
   const lacteos = [
-    { sku: 'LAC-001', name: 'Leche Entera', presentacion: null, description: 'Leche entera 1L', unidadVenta: 'UNIDAD' as const, costPrice: 2800, sellingPrice: 3400, stock: 48 },
-    { sku: 'LAC-002', name: 'Leche Descremada', presentacion: null, description: 'Leche descremada 1L', unidadVenta: 'UNIDAD' as const, costPrice: 2600, sellingPrice: 3200, stock: 52 },
-    { sku: 'LAC-003', name: 'Yogurt Natural', presentacion: null, description: 'Yogurt natural 1kg', unidadVenta: 'PESO' as const, costPrice: 7500, sellingPrice: 9200, stock: 18.5 },
-    { sku: 'LAC-004', name: 'Queso Cheddar', presentacion: null, description: 'Queso cheddar en lonchas 200g', unidadVenta: 'UNIDAD' as const, costPrice: 4200, sellingPrice: 5800, stock: 30 },
-    { sku: 'LAC-005', name: 'Queso Mozzarella', presentacion: null, description: 'Queso mozzarella 250g', unidadVenta: 'UNIDAD' as const, costPrice: 3800, sellingPrice: 5200, stock: 25 },
-    { sku: 'LAC-006', name: 'Mantequilla', presentacion: null, description: 'Mantequilla sin sal 250g', unidadVenta: 'UNIDAD' as const, costPrice: 5500, sellingPrice: 7200, stock: 22 },
-    { sku: 'LAC-007', name: 'Crema de Leche', presentacion: null, description: 'Crema de leche 250ml', unidadVenta: 'VOLUMEN' as const, costPrice: 3200, sellingPrice: 4500, stock: 40 },
-    { sku: 'LAC-008', name: 'Leche Condensada', presentacion: null, description: 'Leche condensada 370g', unidadVenta: 'UNIDAD' as const, costPrice: 4800, sellingPrice: 6500, stock: 35 },
-    { sku: 'LAC-009', name: 'Kumis', presentacion: null, description: 'Kumis natural 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 2200, sellingPrice: 3200, stock: 60 },
-    { sku: 'LAC-010', name: 'Helado Vainilla', presentacion: null, description: 'Helado sabor vainilla 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 4500, sellingPrice: 6800, stock: 15 },
-    { sku: 'LAC-011', name: 'Helado Chocolate', presentacion: null, description: 'Helado sabor chocolate 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 4500, sellingPrice: 6800, stock: 14 },
-    { sku: 'LAC-012', name: 'Requesón', presentacion: null, description: 'Requesón fresco 200g', unidadVenta: 'UNIDAD' as const, costPrice: 2800, sellingPrice: 3800, stock: 20 },
-    { sku: 'LAC-013', name: 'Queso Campesino', presentacion: null, description: 'Queso campesino 500g', unidadVenta: 'PESO' as const, costPrice: 6000, sellingPrice: 8500, stock: 12 },
-    { sku: 'LAC-014', name: 'Nata', presentacion: null, description: 'Nata para cocinar 200ml', unidadVenta: 'VOLUMEN' as const, costPrice: 3500, sellingPrice: 4800, stock: 28 },
-    { sku: 'LAC-015', name: 'Yogurt de Fresa', presentacion: null, description: 'Yogurt sabor fresa 170g', unidadVenta: 'UNIDAD' as const, costPrice: 1200, sellingPrice: 1800, stock: 60 },
+    { sku: 'LAC-001', name: 'Leche Entera', presentacion: null, description: 'Leche entera 1L', unidadVenta: 'UNIDAD' as const, costPrice: 2800, sellingPrice: 3400, stock: 48, sortOrder: 100 },
+    { sku: 'LAC-002', name: 'Leche Descremada', presentacion: null, description: 'Leche descremada 1L', unidadVenta: 'UNIDAD' as const, costPrice: 2600, sellingPrice: 3200, stock: 52, sortOrder: 101 },
+    { sku: 'LAC-003', name: 'Yogurt Natural', presentacion: null, description: 'Yogurt natural 1kg', unidadVenta: 'PESO' as const, costPrice: 7500, sellingPrice: 9200, stock: 18.5, sortOrder: 102 },
+    { sku: 'LAC-004', name: 'Queso Cheddar', presentacion: null, description: 'Queso cheddar en lonchas 200g', unidadVenta: 'UNIDAD' as const, costPrice: 4200, sellingPrice: 5800, stock: 30, sortOrder: 103 },
+    { sku: 'LAC-005', name: 'Queso Mozzarella', presentacion: null, description: 'Queso mozzarella 250g', unidadVenta: 'UNIDAD' as const, costPrice: 3800, sellingPrice: 5200, stock: 25, sortOrder: 104 },
+    { sku: 'LAC-006', name: 'Mantequilla', presentacion: null, description: 'Mantequilla sin sal 250g', unidadVenta: 'UNIDAD' as const, costPrice: 5500, sellingPrice: 7200, stock: 22, sortOrder: 105 },
+    { sku: 'LAC-007', name: 'Crema de Leche', presentacion: null, description: 'Crema de leche 250ml', unidadVenta: 'VOLUMEN' as const, costPrice: 3200, sellingPrice: 4500, stock: 40, sortOrder: 106 },
+    { sku: 'LAC-008', name: 'Leche Condensada', presentacion: null, description: 'Leche condensada 370g', unidadVenta: 'UNIDAD' as const, costPrice: 4800, sellingPrice: 6500, stock: 35, sortOrder: 107 },
+    { sku: 'LAC-009', name: 'Kumis', presentacion: null, description: 'Kumis natural 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 2200, sellingPrice: 3200, stock: 60, sortOrder: 108 },
+    { sku: 'LAC-010', name: 'Helado Vainilla', presentacion: null, description: 'Helado sabor vainilla 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 4500, sellingPrice: 6800, stock: 15, sortOrder: 109 },
+    { sku: 'LAC-011', name: 'Helado Chocolate', presentacion: null, description: 'Helado sabor chocolate 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 4500, sellingPrice: 6800, stock: 14, sortOrder: 110 },
+    { sku: 'LAC-012', name: 'Requesón', presentacion: null, description: 'Requesón fresco 200g', unidadVenta: 'UNIDAD' as const, costPrice: 2800, sellingPrice: 3800, stock: 20, sortOrder: 111 },
+    { sku: 'LAC-013', name: 'Queso Campesino', presentacion: null, description: 'Queso campesino 500g', unidadVenta: 'PESO' as const, costPrice: 6000, sellingPrice: 8500, stock: 12, sortOrder: 112 },
+    { sku: 'LAC-014', name: 'Nata', presentacion: null, description: 'Nata para cocinar 200ml', unidadVenta: 'VOLUMEN' as const, costPrice: 3500, sellingPrice: 4800, stock: 28, sortOrder: 113 },
+    { sku: 'LAC-015', name: 'Yogurt de Fresa', presentacion: null, description: 'Yogurt sabor fresa 170g', unidadVenta: 'UNIDAD' as const, costPrice: 1200, sellingPrice: 1800, stock: 60, sortOrder: 114 },
   ];
 
   for (const p of lacteos) {
@@ -112,21 +114,21 @@ async function main() {
 
   // ─── BEBIDAS (15) — categoría[3] ──────────────────────────
   const bebidas = [
-    { sku: 'BEB-001', name: 'Agua Botella', presentacion: null, description: 'Agua purificada 600ml', unidadVenta: 'UNIDAD' as const, costPrice: 800, sellingPrice: 1500, stock: 80 },
-    { sku: 'BEB-002', name: 'Gaseosa Cola', presentacion: null, description: 'Gaseosa cola 2L', unidadVenta: 'UNIDAD' as const, costPrice: 3800, sellingPrice: 5200, stock: 30 },
-    { sku: 'BEB-003', name: 'Gaseosa Limón', presentacion: null, description: 'Gaseosa limón 2L', unidadVenta: 'UNIDAD' as const, costPrice: 3600, sellingPrice: 5000, stock: 28 },
-    { sku: 'BEB-004', name: 'Jugo de Naranja', presentacion: null, description: 'Jugo natural de naranja 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 3200, sellingPrice: 4800, stock: 25 },
-    { sku: 'BEB-005', name: 'Jugo de Mango', presentacion: null, description: 'Jugo de mango 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 3500, sellingPrice: 5000, stock: 22 },
-    { sku: 'BEB-006', name: 'Agua de Coco', presentacion: null, description: 'Agua de coco 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 2500, sellingPrice: 3800, stock: 36 },
-    { sku: 'BEB-007', name: 'Limonada Natural', presentacion: null, description: 'Limonada natural preparada 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 2000, sellingPrice: 3500, stock: 20 },
-    { sku: 'BEB-008', name: 'Colombiana', presentacion: null, description: 'Gaseosa colombiana 1.5L', unidadVenta: 'UNIDAD' as const, costPrice: 3200, sellingPrice: 4500, stock: 24 },
-    { sku: 'BEB-009', name: 'Manzana Postobón', presentacion: null, description: 'Gaseosa manzana 1.5L', unidadVenta: 'UNIDAD' as const, costPrice: 3000, sellingPrice: 4200, stock: 26 },
-    { sku: 'BEB-010', name: 'Sprite', presentacion: null, description: 'Gaseosa sprite 2L', unidadVenta: 'UNIDAD' as const, costPrice: 3600, sellingPrice: 5000, stock: 30 },
-    { sku: 'BEB-011', name: 'Energizante', presentacion: null, description: 'Energizante 473ml', unidadVenta: 'VOLUMEN' as const, costPrice: 3500, sellingPrice: 5500, stock: 35 },
-    { sku: 'BEB-012', name: 'Café Molido', presentacion: null, description: 'Café molido premium 500g', unidadVenta: 'PESO' as const, costPrice: 12000, sellingPrice: 16500, stock: 15 },
-    { sku: 'BEB-013', name: 'Té Verde', presentacion: null, description: 'Té verde en saquitos 20u', unidadVenta: 'UNIDAD' as const, costPrice: 3200, sellingPrice: 4800, stock: 40 },
-    { sku: 'BEB-014', name: 'Aperitivo', presentacion: null, description: 'Aperitivo 750ml', unidadVenta: 'VOLUMEN' as const, costPrice: 8500, sellingPrice: 12000, stock: 18 },
-    { sku: 'BEB-015', name: 'Soda Italiana', presentacion: null, description: 'Soda italiana 350ml', unidadVenta: 'VOLUMEN' as const, costPrice: 1500, sellingPrice: 2200, stock: 48 },
+    { sku: 'BEB-001', name: 'Agua Botella', presentacion: null, description: 'Agua purificada 600ml', unidadVenta: 'UNIDAD' as const, costPrice: 800, sellingPrice: 1500, stock: 80, sortOrder: 200 },
+    { sku: 'BEB-002', name: 'Gaseosa Cola', presentacion: null, description: 'Gaseosa cola 2L', unidadVenta: 'UNIDAD' as const, costPrice: 3800, sellingPrice: 5200, stock: 30, sortOrder: 201 },
+    { sku: 'BEB-003', name: 'Gaseosa Limón', presentacion: null, description: 'Gaseosa limón 2L', unidadVenta: 'UNIDAD' as const, costPrice: 3600, sellingPrice: 5000, stock: 28, sortOrder: 202 },
+    { sku: 'BEB-004', name: 'Jugo de Naranja', presentacion: null, description: 'Jugo natural de naranja 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 3200, sellingPrice: 4800, stock: 25, sortOrder: 203 },
+    { sku: 'BEB-005', name: 'Jugo de Mango', presentacion: null, description: 'Jugo de mango 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 3500, sellingPrice: 5000, stock: 22, sortOrder: 204 },
+    { sku: 'BEB-006', name: 'Agua de Coco', presentacion: null, description: 'Agua de coco 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 2500, sellingPrice: 3800, stock: 36, sortOrder: 205 },
+    { sku: 'BEB-007', name: 'Limonada Natural', presentacion: null, description: 'Limonada natural preparada 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 2000, sellingPrice: 3500, stock: 20, sortOrder: 206 },
+    { sku: 'BEB-008', name: 'Colombiana', presentacion: null, description: 'Gaseosa colombiana 1.5L', unidadVenta: 'UNIDAD' as const, costPrice: 3200, sellingPrice: 4500, stock: 24, sortOrder: 207 },
+    { sku: 'BEB-009', name: 'Manzana Postobón', presentacion: null, description: 'Gaseosa manzana 1.5L', unidadVenta: 'UNIDAD' as const, costPrice: 3000, sellingPrice: 4200, stock: 26, sortOrder: 208 },
+    { sku: 'BEB-010', name: 'Sprite', presentacion: null, description: 'Gaseosa sprite 2L', unidadVenta: 'UNIDAD' as const, costPrice: 3600, sellingPrice: 5000, stock: 30, sortOrder: 209 },
+    { sku: 'BEB-011', name: 'Energizante', presentacion: null, description: 'Energizante 473ml', unidadVenta: 'VOLUMEN' as const, costPrice: 3500, sellingPrice: 5500, stock: 35, sortOrder: 210 },
+    { sku: 'BEB-012', name: 'Café Molido', presentacion: null, description: 'Café molido premium 500g', unidadVenta: 'PESO' as const, costPrice: 12000, sellingPrice: 16500, stock: 15, sortOrder: 211 },
+    { sku: 'BEB-013', name: 'Té Verde', presentacion: null, description: 'Té verde en saquitos 20u', unidadVenta: 'UNIDAD' as const, costPrice: 3200, sellingPrice: 4800, stock: 40, sortOrder: 212 },
+    { sku: 'BEB-014', name: 'Aperitivo', presentacion: null, description: 'Aperitivo 750ml', unidadVenta: 'VOLUMEN' as const, costPrice: 8500, sellingPrice: 12000, stock: 18, sortOrder: 213 },
+    { sku: 'BEB-015', name: 'Soda Italiana', presentacion: null, description: 'Soda italiana 350ml', unidadVenta: 'VOLUMEN' as const, costPrice: 1500, sellingPrice: 2200, stock: 48, sortOrder: 214 },
   ];
 
   for (const p of bebidas) {
@@ -135,21 +137,21 @@ async function main() {
 
   // ─── ALIMENTOS BÁSICOS (15) — categoría[1] ────────────────
   const alimentos = [
-    { sku: 'ALI-001', name: 'Arroz', presentacion: null, description: 'Arroz blanco 1kg', unidadVenta: 'UNIDAD' as const, costPrice: 2800, sellingPrice: 3600, stock: 60 },
-    { sku: 'ALI-002', name: 'Frijol Rojo', presentacion: null, description: 'Frijol rojo 1kg', unidadVenta: 'UNIDAD' as const, costPrice: 3200, sellingPrice: 4200, stock: 45 },
-    { sku: 'ALI-003', name: 'Frijol Blanco', presentacion: null, description: 'Frijol blanco 1kg', unidadVenta: 'UNIDAD' as const, costPrice: 3000, sellingPrice: 4000, stock: 40 },
-    { sku: 'ALI-004', name: 'Lenteja', presentacion: null, description: 'Lenteja 500g', unidadVenta: 'UNIDAD' as const, costPrice: 2600, sellingPrice: 3500, stock: 35 },
-    { sku: 'ALI-005', name: 'Garbanzo', presentacion: null, description: 'Garbanzo 500g', unidadVenta: 'UNIDAD' as const, costPrice: 3800, sellingPrice: 5200, stock: 25 },
-    { sku: 'ALI-006', name: 'Azúcar', presentacion: null, description: 'Azúcar 1kg', unidadVenta: 'UNIDAD' as const, costPrice: 2200, sellingPrice: 3000, stock: 55 },
-    { sku: 'ALI-007', name: 'Sal', presentacion: null, description: 'Sal refinada 500g', unidadVenta: 'UNIDAD' as const, costPrice: 800, sellingPrice: 1400, stock: 70 },
-    { sku: 'ALI-008', name: 'Aceite Vegetal', presentacion: null, description: 'Aceite vegetal 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 5500, sellingPrice: 7200, stock: 18 },
-    { sku: 'ALI-009', name: 'Pasta Spaghetti', presentacion: null, description: 'Pasta espagueti 500g', unidadVenta: 'UNIDAD' as const, costPrice: 1800, sellingPrice: 2600, stock: 50 },
-    { sku: 'ALI-010', name: 'Pasta Penne', presentacion: null, description: 'Pasta penne 500g', unidadVenta: 'UNIDAD' as const, costPrice: 1800, sellingPrice: 2600, stock: 45 },
-    { sku: 'ALI-011', name: 'Salsa de Tomate', presentacion: null, description: 'Salsa de tomate 400g', unidadVenta: 'UNIDAD' as const, costPrice: 2500, sellingPrice: 3500, stock: 40 },
-    { sku: 'ALI-012', name: 'Salsa de Ají', presentacion: null, description: 'Salsa de ají picante 250ml', unidadVenta: 'VOLUMEN' as const, costPrice: 2200, sellingPrice: 3200, stock: 30 },
-    { sku: 'ALI-013', name: 'Cebolla', presentacion: null, description: 'Cebolla cabezona 1lb', unidadVenta: 'PESO' as const, costPrice: 1500, sellingPrice: 2200, stock: 20 },
-    { sku: 'ALI-014', name: 'Tomate', presentacion: null, description: 'Tomate de mesa 1lb', unidadVenta: 'PESO' as const, costPrice: 1800, sellingPrice: 2600, stock: 18 },
-    { sku: 'ALI-015', name: 'Papa', presentacion: null, description: 'Papa pastusa 1kg', unidadVenta: 'PESO' as const, costPrice: 2400, sellingPrice: 3200, stock: 25 },
+    { sku: 'ALI-001', name: 'Arroz', presentacion: null, description: 'Arroz blanco 1kg', unidadVenta: 'UNIDAD' as const, costPrice: 2800, sellingPrice: 3600, stock: 60, sortOrder: 300 },
+    { sku: 'ALI-002', name: 'Frijol Rojo', presentacion: null, description: 'Frijol rojo 1kg', unidadVenta: 'UNIDAD' as const, costPrice: 3200, sellingPrice: 4200, stock: 45, sortOrder: 301 },
+    { sku: 'ALI-003', name: 'Frijol Blanco', presentacion: null, description: 'Frijol blanco 1kg', unidadVenta: 'UNIDAD' as const, costPrice: 3000, sellingPrice: 4000, stock: 40, sortOrder: 302 },
+    { sku: 'ALI-004', name: 'Lenteja', presentacion: null, description: 'Lenteja 500g', unidadVenta: 'UNIDAD' as const, costPrice: 2600, sellingPrice: 3500, stock: 35, sortOrder: 303 },
+    { sku: 'ALI-005', name: 'Garbanzo', presentacion: null, description: 'Garbanzo 500g', unidadVenta: 'UNIDAD' as const, costPrice: 3800, sellingPrice: 5200, stock: 25, sortOrder: 304 },
+    { sku: 'ALI-006', name: 'Azúcar', presentacion: null, description: 'Azúcar 1kg', unidadVenta: 'UNIDAD' as const, costPrice: 2200, sellingPrice: 3000, stock: 55, sortOrder: 305 },
+    { sku: 'ALI-007', name: 'Sal', presentacion: null, description: 'Sal refinada 500g', unidadVenta: 'UNIDAD' as const, costPrice: 800, sellingPrice: 1400, stock: 70, sortOrder: 306 },
+    { sku: 'ALI-008', name: 'Aceite Vegetal', presentacion: null, description: 'Aceite vegetal 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 5500, sellingPrice: 7200, stock: 18, sortOrder: 307 },
+    { sku: 'ALI-009', name: 'Pasta Spaghetti', presentacion: null, description: 'Pasta espagueti 500g', unidadVenta: 'UNIDAD' as const, costPrice: 1800, sellingPrice: 2600, stock: 50, sortOrder: 308 },
+    { sku: 'ALI-010', name: 'Pasta Penne', presentacion: null, description: 'Pasta penne 500g', unidadVenta: 'UNIDAD' as const, costPrice: 1800, sellingPrice: 2600, stock: 45, sortOrder: 309 },
+    { sku: 'ALI-011', name: 'Salsa de Tomate', presentacion: null, description: 'Salsa de tomate 400g', unidadVenta: 'UNIDAD' as const, costPrice: 2500, sellingPrice: 3500, stock: 40, sortOrder: 310 },
+    { sku: 'ALI-012', name: 'Salsa de Ají', presentacion: null, description: 'Salsa de ají picante 250ml', unidadVenta: 'VOLUMEN' as const, costPrice: 2200, sellingPrice: 3200, stock: 30, sortOrder: 311 },
+    { sku: 'ALI-013', name: 'Cebolla', presentacion: null, description: 'Cebolla cabezona 1lb', unidadVenta: 'PESO' as const, costPrice: 1500, sellingPrice: 2200, stock: 20, sortOrder: 312 },
+    { sku: 'ALI-014', name: 'Tomate', presentacion: null, description: 'Tomate de mesa 1lb', unidadVenta: 'PESO' as const, costPrice: 1800, sellingPrice: 2600, stock: 18, sortOrder: 313 },
+    { sku: 'ALI-015', name: 'Papa', presentacion: null, description: 'Papa pastusa 1kg', unidadVenta: 'PESO' as const, costPrice: 2400, sellingPrice: 3200, stock: 25, sortOrder: 314 },
   ];
 
   for (const p of alimentos) {
@@ -158,21 +160,21 @@ async function main() {
 
   // ─── ABARROTES (15) — categoría[2] ────────────────────────
   const abarrotes = [
-    { sku: 'ABAR-001', name: 'Galletas Moore', presentacion: null, description: 'Galletas de soda 400g', unidadVenta: 'UNIDAD' as const, costPrice: 2500, sellingPrice: 3400, stock: 50 },
-    { sku: 'ABAR-002', name: 'Galletas Saltin', presentacion: null, description: 'Galletas saltin 180g', unidadVenta: 'UNIDAD' as const, costPrice: 1800, sellingPrice: 2500, stock: 60 },
-    { sku: 'ABAR-003', name: 'Papa Frita', presentacion: null, description: 'Papa frita chips 45g', unidadVenta: 'UNIDAD' as const, costPrice: 1200, sellingPrice: 1800, stock: 80 },
-    { sku: 'ABAR-004', name: 'Pony Malta', presentacion: null, description: 'Pony Malta lata 330ml', unidadVenta: 'VOLUMEN' as const, costPrice: 1500, sellingPrice: 2200, stock: 72 },
-    { sku: 'ABAR-005', name: 'Panela', presentacion: null, description: 'Panela pilada 500g', unidadVenta: 'UNIDAD' as const, costPrice: 2800, sellingPrice: 3800, stock: 35 },
-    { sku: 'ABAR-006', name: 'Cacao en Polvo', presentacion: null, description: 'Cacao en polvo 200g', unidadVenta: 'UNIDAD' as const, costPrice: 4500, sellingPrice: 6200, stock: 28 },
-    { sku: 'ABAR-007', name: 'Avena', presentacion: null, description: 'Avena en hojuelas 500g', unidadVenta: 'UNIDAD' as const, costPrice: 2200, sellingPrice: 3000, stock: 40 },
-    { sku: 'ABAR-008', name: 'Harina de Trigo', presentacion: null, description: 'Harina de trigo 1kg', unidadVenta: 'UNIDAD' as const, costPrice: 2000, sellingPrice: 2800, stock: 38 },
-    { sku: 'ABAR-009', name: 'Maicena', presentacion: null, description: 'Maicena 500g', unidadVenta: 'UNIDAD' as const, costPrice: 2500, sellingPrice: 3500, stock: 25 },
-    { sku: 'ABAR-010', name: 'Atún', presentacion: null, description: 'Atún en agua 170g', unidadVenta: 'UNIDAD' as const, costPrice: 2800, sellingPrice: 3800, stock: 42 },
-    { sku: 'ABAR-011', name: 'Sardina', presentacion: null, description: 'Sardina en salsa 155g', unidadVenta: 'UNIDAD' as const, costPrice: 1800, sellingPrice: 2600, stock: 35 },
-    { sku: 'ABAR-012', name: 'Chocoramo', presentacion: null, description: 'Chocoramo 60g', unidadVenta: 'UNIDAD' as const, costPrice: 900, sellingPrice: 1400, stock: 90 },
-    { sku: 'ABAR-013', name: 'Pandebono', presentacion: null, description: 'Pandebono 500g', unidadVenta: 'PESO' as const, costPrice: 4500, sellingPrice: 6500, stock: 12 },
-    { sku: 'ABAR-014', name: 'Empanada', presentacion: null, description: 'Empanada de carne uds', unidadVenta: 'UNIDAD' as const, costPrice: 1200, sellingPrice: 2000, stock: 24 },
-    { sku: 'ABAR-015', name: 'Pan Francés', presentacion: null, description: 'Pan francés uds', unidadVenta: 'UNIDAD' as const, costPrice: 300, sellingPrice: 600, stock: 50 },
+    { sku: 'ABAR-001', name: 'Galletas Moore', presentacion: null, description: 'Galletas de soda 400g', unidadVenta: 'UNIDAD' as const, costPrice: 2500, sellingPrice: 3400, stock: 50, sortOrder: 400 },
+    { sku: 'ABAR-002', name: 'Galletas Saltin', presentacion: null, description: 'Galletas saltin 180g', unidadVenta: 'UNIDAD' as const, costPrice: 1800, sellingPrice: 2500, stock: 60, sortOrder: 401 },
+    { sku: 'ABAR-003', name: 'Papa Frita', presentacion: null, description: 'Papa frita chips 45g', unidadVenta: 'UNIDAD' as const, costPrice: 1200, sellingPrice: 1800, stock: 80, sortOrder: 402 },
+    { sku: 'ABAR-004', name: 'Pony Malta', presentacion: null, description: 'Pony Malta lata 330ml', unidadVenta: 'VOLUMEN' as const, costPrice: 1500, sellingPrice: 2200, stock: 72, sortOrder: 403 },
+    { sku: 'ABAR-005', name: 'Panela', presentacion: null, description: 'Panela pilada 500g', unidadVenta: 'UNIDAD' as const, costPrice: 2800, sellingPrice: 3800, stock: 35, sortOrder: 404 },
+    { sku: 'ABAR-006', name: 'Cacao en Polvo', presentacion: null, description: 'Cacao en polvo 200g', unidadVenta: 'UNIDAD' as const, costPrice: 4500, sellingPrice: 6200, stock: 28, sortOrder: 405 },
+    { sku: 'ABAR-007', name: 'Avena', presentacion: null, description: 'Avena en hojuelas 500g', unidadVenta: 'UNIDAD' as const, costPrice: 2200, sellingPrice: 3000, stock: 40, sortOrder: 406 },
+    { sku: 'ABAR-008', name: 'Harina de Trigo', presentacion: null, description: 'Harina de trigo 1kg', unidadVenta: 'UNIDAD' as const, costPrice: 2000, sellingPrice: 2800, stock: 38, sortOrder: 407 },
+    { sku: 'ABAR-009', name: 'Maicena', presentacion: null, description: 'Maicena 500g', unidadVenta: 'UNIDAD' as const, costPrice: 2500, sellingPrice: 3500, stock: 25, sortOrder: 408 },
+    { sku: 'ABAR-010', name: 'Atún', presentacion: null, description: 'Atún en agua 170g', unidadVenta: 'UNIDAD' as const, costPrice: 2800, sellingPrice: 3800, stock: 42, sortOrder: 409 },
+    { sku: 'ABAR-011', name: 'Sardina', presentacion: null, description: 'Sardina en salsa 155g', unidadVenta: 'UNIDAD' as const, costPrice: 1800, sellingPrice: 2600, stock: 35, sortOrder: 410 },
+    { sku: 'ABAR-012', name: 'Chocoramo', presentacion: null, description: 'Chocoramo 60g', unidadVenta: 'UNIDAD' as const, costPrice: 900, sellingPrice: 1400, stock: 90, sortOrder: 411 },
+    { sku: 'ABAR-013', name: 'Pandebono', presentacion: null, description: 'Pandebono 500g', unidadVenta: 'PESO' as const, costPrice: 4500, sellingPrice: 6500, stock: 12, sortOrder: 412 },
+    { sku: 'ABAR-014', name: 'Empanada', presentacion: null, description: 'Empanada de carne uds', unidadVenta: 'UNIDAD' as const, costPrice: 1200, sellingPrice: 2000, stock: 24, sortOrder: 413 },
+    { sku: 'ABAR-015', name: 'Pan Francés', presentacion: null, description: 'Pan francés uds', unidadVenta: 'UNIDAD' as const, costPrice: 300, sellingPrice: 600, stock: 50, sortOrder: 414 },
   ];
 
   for (const p of abarrotes) {
@@ -181,21 +183,21 @@ async function main() {
 
   // ─── LIMPIEZA (15) — categoría[5] ─────────────────────────
   const limpieza = [
-    { sku: 'LIMP-001', name: 'Jabón Rey', presentacion: null, description: 'Jabón rey en barra 170g', unidadVenta: 'UNIDAD' as const, costPrice: 1500, sellingPrice: 2200, stock: 60 },
-    { sku: 'LIMP-002', name: 'Jabón Líquido', presentacion: null, description: 'Jabón líquido manos 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 3500, sellingPrice: 5000, stock: 30 },
-    { sku: 'LIMP-003', name: 'Cloro', presentacion: null, description: 'Cloro desinfectante 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 2200, sellingPrice: 3200, stock: 45 },
-    { sku: 'LIMP-004', name: 'Detégel', presentacion: null, description: 'Líquido lavavajillas 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 3200, sellingPrice: 4500, stock: 35 },
-    { sku: 'LIMP-005', name: 'Fabuloso', presentacion: null, description: 'Limpiador multiusos 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 4200, sellingPrice: 5800, stock: 28 },
-    { sku: 'LIMP-006', name: 'Suavizante', presentacion: null, description: 'Suavizante de ropa 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 5500, sellingPrice: 7500, stock: 22 },
-    { sku: 'LIMP-007', name: 'Detergente', presentacion: null, description: 'Detergente en polvo 1kg', unidadVenta: 'UNIDAD' as const, costPrice: 4800, sellingPrice: 6500, stock: 32 },
-    { sku: 'LIMP-008', name: 'Limpiapisos', presentacion: null, description: 'Limpiador de pisos 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 3800, sellingPrice: 5200, stock: 25 },
-    { sku: 'LIMP-009', name: 'Esponja', presentacion: null, description: 'Esponja lavavajillas 3u', unidadVenta: 'UNIDAD' as const, costPrice: 1500, sellingPrice: 2200, stock: 55 },
-    { sku: 'LIMP-010', name: 'Trapo', presentacion: null, description: 'Trapo de piso', unidadVenta: 'UNIDAD' as const, costPrice: 2000, sellingPrice: 3000, stock: 30 },
-    { sku: 'LIMP-011', name: 'Escoba', presentacion: null, description: 'Escoba para barrer', unidadVenta: 'UNIDAD' as const, costPrice: 4500, sellingPrice: 6500, stock: 15 },
-    { sku: 'LIMP-012', name: 'Recogedor', presentacion: null, description: 'Recogedor para basura', unidadVenta: 'UNIDAD' as const, costPrice: 3000, sellingPrice: 4200, stock: 18 },
-    { sku: 'LIMP-013', name: 'Guantes', presentacion: null, description: 'Guantes de limpieza 1u', unidadVenta: 'UNIDAD' as const, costPrice: 2500, sellingPrice: 3500, stock: 40 },
-    { sku: 'LIMP-014', name: 'Desinfectante', presentacion: null, description: 'Desinfectante total 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 3500, sellingPrice: 5000, stock: 20 },
-    { sku: 'LIMP-015', name: 'Limpiacristales', presentacion: null, description: 'Limpiador de vidrios 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 4000, sellingPrice: 5500, stock: 22 },
+    { sku: 'LIMP-001', name: 'Jabón Rey', presentacion: null, description: 'Jabón rey en barra 170g', unidadVenta: 'UNIDAD' as const, costPrice: 1500, sellingPrice: 2200, stock: 60, sortOrder: 500 },
+    { sku: 'LIMP-002', name: 'Jabón Líquido', presentacion: null, description: 'Jabón líquido manos 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 3500, sellingPrice: 5000, stock: 30, sortOrder: 501 },
+    { sku: 'LIMP-003', name: 'Cloro', presentacion: null, description: 'Cloro desinfectante 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 2200, sellingPrice: 3200, stock: 45, sortOrder: 502 },
+    { sku: 'LIMP-004', name: 'Detégel', presentacion: null, description: 'Líquido lavavajillas 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 3200, sellingPrice: 4500, stock: 35, sortOrder: 503 },
+    { sku: 'LIMP-005', name: 'Fabuloso', presentacion: null, description: 'Limpiador multiusos 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 4200, sellingPrice: 5800, stock: 28, sortOrder: 504 },
+    { sku: 'LIMP-006', name: 'Suavizante', presentacion: null, description: 'Suavizante de ropa 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 5500, sellingPrice: 7500, stock: 22, sortOrder: 505 },
+    { sku: 'LIMP-007', name: 'Detergente', presentacion: null, description: 'Detergente en polvo 1kg', unidadVenta: 'UNIDAD' as const, costPrice: 4800, sellingPrice: 6500, stock: 32, sortOrder: 506 },
+    { sku: 'LIMP-008', name: 'Limpiapisos', presentacion: null, description: 'Limpiador de pisos 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 3800, sellingPrice: 5200, stock: 25, sortOrder: 507 },
+    { sku: 'LIMP-009', name: 'Esponja', presentacion: null, description: 'Esponja lavavajillas 3u', unidadVenta: 'UNIDAD' as const, costPrice: 1500, sellingPrice: 2200, stock: 55, sortOrder: 508 },
+    { sku: 'LIMP-010', name: 'Trapo', presentacion: null, description: 'Trapo de piso', unidadVenta: 'UNIDAD' as const, costPrice: 2000, sellingPrice: 3000, stock: 30, sortOrder: 509 },
+    { sku: 'LIMP-011', name: 'Escoba', presentacion: null, description: 'Escoba para barrer', unidadVenta: 'UNIDAD' as const, costPrice: 4500, sellingPrice: 6500, stock: 15, sortOrder: 510 },
+    { sku: 'LIMP-012', name: 'Recogedor', presentacion: null, description: 'Recogedor para basura', unidadVenta: 'UNIDAD' as const, costPrice: 3000, sellingPrice: 4200, stock: 18, sortOrder: 511 },
+    { sku: 'LIMP-013', name: 'Guantes', presentacion: null, description: 'Guantes de limpieza 1u', unidadVenta: 'UNIDAD' as const, costPrice: 2500, sellingPrice: 3500, stock: 40, sortOrder: 512 },
+    { sku: 'LIMP-014', name: 'Desinfectante', presentacion: null, description: 'Desinfectante total 1L', unidadVenta: 'VOLUMEN' as const, costPrice: 3500, sellingPrice: 5000, stock: 20, sortOrder: 513 },
+    { sku: 'LIMP-015', name: 'Limpiacristales', presentacion: null, description: 'Limpiador de vidrios 500ml', unidadVenta: 'VOLUMEN' as const, costPrice: 4000, sellingPrice: 5500, stock: 22, sortOrder: 514 },
   ];
 
   for (const p of limpieza) {
@@ -204,21 +206,21 @@ async function main() {
 
   // ─── ARTÍCULOS DE USO PERSONAL (15) — categoría[6] ────────
   const higiene = [
-    { sku: 'HIG-001', name: 'Papel Higiénico', presentacion: null, description: 'Papel higiénico 4 rollos', unidadVenta: 'UNIDAD' as const, costPrice: 3200, sellingPrice: 4500, stock: 45 },
-    { sku: 'HIG-002', name: 'Servilleta', presentacion: null, description: 'Servilleta facial 150u', unidadVenta: 'UNIDAD' as const, costPrice: 2500, sellingPrice: 3500, stock: 35 },
-    { sku: 'HIG-003', name: 'Jabón Dove', presentacion: null, description: 'Jabón dove 90g', unidadVenta: 'UNIDAD' as const, costPrice: 2800, sellingPrice: 3800, stock: 50 },
-    { sku: 'HIG-004', name: 'Shampoo', presentacion: null, description: 'Shampoo 400ml', unidadVenta: 'VOLUMEN' as const, costPrice: 6500, sellingPrice: 8500, stock: 25 },
-    { sku: 'HIG-005', name: 'Acondicionador', presentacion: null, description: 'Acondicionador 400ml', unidadVenta: 'VOLUMEN' as const, costPrice: 6000, sellingPrice: 8000, stock: 22 },
-    { sku: 'HIG-006', name: 'Crema Dental', presentacion: null, description: 'Crema dental 90ml', unidadVenta: 'UNIDAD' as const, costPrice: 3500, sellingPrice: 4800, stock: 30 },
-    { sku: 'HIG-007', name: 'Cepillo Dental', presentacion: null, description: 'Cepillo dental adulto', unidadVenta: 'UNIDAD' as const, costPrice: 2000, sellingPrice: 3000, stock: 40 },
-    { sku: 'HIG-008', name: 'Desodorante', presentacion: null, description: 'Desodorante barra 50g', unidadVenta: 'UNIDAD' as const, costPrice: 5500, sellingPrice: 7200, stock: 28 },
-    { sku: 'HIG-009', name: 'Desodorante Roll-on', presentacion: null, description: 'Desodorante roll-on 50ml', unidadVenta: 'VOLUMEN' as const, costPrice: 4800, sellingPrice: 6500, stock: 25 },
-    { sku: 'HIG-010', name: 'Alcohol Gel', presentacion: null, description: 'Alcohol gel 250ml', unidadVenta: 'VOLUMEN' as const, costPrice: 3500, sellingPrice: 5000, stock: 32 },
-    { sku: 'HIG-011', name: 'Toallas Húmedas', presentacion: null, description: 'Toallas húmedas 48u', unidadVenta: 'UNIDAD' as const, costPrice: 4200, sellingPrice: 5800, stock: 28 },
-    { sku: 'HIG-012', name: 'Hisopos', presentacion: null, description: 'Hisopos de algodón 100u', unidadVenta: 'UNIDAD' as const, costPrice: 1800, sellingPrice: 2600, stock: 35 },
-    { sku: 'HIG-013', name: 'Enjuague Bucal', presentacion: null, description: 'Enjuague bucal 250ml', unidadVenta: 'VOLUMEN' as const, costPrice: 4500, sellingPrice: 6200, stock: 20 },
-    { sku: 'HIG-014', name: 'Maquinilla', presentacion: null, description: 'Maquinilla de afeitar 3u', unidadVenta: 'UNIDAD' as const, costPrice: 6000, sellingPrice: 8000, stock: 15 },
-    { sku: 'HIG-015', name: 'Talco', presentacion: null, description: 'Talco para pies 200g', unidadVenta: 'UNIDAD' as const, costPrice: 3000, sellingPrice: 4200, stock: 25 },
+    { sku: 'HIG-001', name: 'Papel Higiénico', presentacion: null, description: 'Papel higiénico 4 rollos', unidadVenta: 'UNIDAD' as const, costPrice: 3200, sellingPrice: 4500, stock: 45, sortOrder: 600 },
+    { sku: 'HIG-002', name: 'Servilleta', presentacion: null, description: 'Servilleta facial 150u', unidadVenta: 'UNIDAD' as const, costPrice: 2500, sellingPrice: 3500, stock: 35, sortOrder: 601 },
+    { sku: 'HIG-003', name: 'Jabón Dove', presentacion: null, description: 'Jabón dove 90g', unidadVenta: 'UNIDAD' as const, costPrice: 2800, sellingPrice: 3800, stock: 50, sortOrder: 602 },
+    { sku: 'HIG-004', name: 'Shampoo', presentacion: null, description: 'Shampoo 400ml', unidadVenta: 'VOLUMEN' as const, costPrice: 6500, sellingPrice: 8500, stock: 25, sortOrder: 603 },
+    { sku: 'HIG-005', name: 'Acondicionador', presentacion: null, description: 'Acondicionador 400ml', unidadVenta: 'VOLUMEN' as const, costPrice: 6000, sellingPrice: 8000, stock: 22, sortOrder: 604 },
+    { sku: 'HIG-006', name: 'Crema Dental', presentacion: null, description: 'Crema dental 90ml', unidadVenta: 'UNIDAD' as const, costPrice: 3500, sellingPrice: 4800, stock: 30, sortOrder: 605 },
+    { sku: 'HIG-007', name: 'Cepillo Dental', presentacion: null, description: 'Cepillo dental adulto', unidadVenta: 'UNIDAD' as const, costPrice: 2000, sellingPrice: 3000, stock: 40, sortOrder: 606 },
+    { sku: 'HIG-008', name: 'Desodorante', presentacion: null, description: 'Desodorante barra 50g', unidadVenta: 'UNIDAD' as const, costPrice: 5500, sellingPrice: 7200, stock: 28, sortOrder: 607 },
+    { sku: 'HIG-009', name: 'Desodorante Roll-on', presentacion: null, description: 'Desodorante roll-on 50ml', unidadVenta: 'VOLUMEN' as const, costPrice: 4800, sellingPrice: 6500, stock: 25, sortOrder: 608 },
+    { sku: 'HIG-010', name: 'Alcohol Gel', presentacion: null, description: 'Alcohol gel 250ml', unidadVenta: 'VOLUMEN' as const, costPrice: 3500, sellingPrice: 5000, stock: 32, sortOrder: 609 },
+    { sku: 'HIG-011', name: 'Toallas Húmedas', presentacion: null, description: 'Toallas húmedas 48u', unidadVenta: 'UNIDAD' as const, costPrice: 4200, sellingPrice: 5800, stock: 28, sortOrder: 610 },
+    { sku: 'HIG-012', name: 'Hisopos', presentacion: null, description: 'Hisopos de algodón 100u', unidadVenta: 'UNIDAD' as const, costPrice: 1800, sellingPrice: 2600, stock: 35, sortOrder: 611 },
+    { sku: 'HIG-013', name: 'Enjuague Bucal', presentacion: null, description: 'Enjuague bucal 250ml', unidadVenta: 'VOLUMEN' as const, costPrice: 4500, sellingPrice: 6200, stock: 20, sortOrder: 612 },
+    { sku: 'HIG-014', name: 'Maquinilla', presentacion: null, description: 'Maquinilla de afeitar 3u', unidadVenta: 'UNIDAD' as const, costPrice: 6000, sellingPrice: 8000, stock: 15, sortOrder: 613 },
+    { sku: 'HIG-015', name: 'Talco', presentacion: null, description: 'Talco para pies 200g', unidadVenta: 'UNIDAD' as const, costPrice: 3000, sellingPrice: 4200, stock: 25, sortOrder: 614 },
   ];
 
   for (const p of higiene) {
@@ -227,16 +229,16 @@ async function main() {
 
   // ─── GENERAL (10) — categoría[0] ──────────────────────────
   const general = [
-    { sku: 'GEN-001', name: 'Cigarrillo', presentacion: null, description: 'Cigarrillo Portland 10u', unidadVenta: 'UNIDAD' as const, costPrice: 5500, sellingPrice: 7000, stock: 50 },
-    { sku: 'GEN-002', name: 'Fósforo', presentacion: null, description: 'Caja de fósforos', unidadVenta: 'UNIDAD' as const, costPrice: 400, sellingPrice: 800, stock: 80 },
-    { sku: 'GEN-003', name: 'Vela', presentacion: null, description: 'Vela blanca 1u', unidadVenta: 'UNIDAD' as const, costPrice: 1200, sellingPrice: 1800, stock: 30 },
-    { sku: 'GEN-004', name: 'Encendedor', presentacion: null, description: 'Encendedor desechable', unidadVenta: 'UNIDAD' as const, costPrice: 500, sellingPrice: 1000, stock: 65 },
-    { sku: 'GEN-005', name: 'Bolsa Basura', presentacion: null, description: 'Bolsa de basura 30u', unidadVenta: 'UNIDAD' as const, costPrice: 2200, sellingPrice: 3200, stock: 40 },
-    { sku: 'GEN-006', name: 'Pilas', presentacion: null, description: 'Pilas alcalinas AA 4u', unidadVenta: 'UNIDAD' as const, costPrice: 8500, sellingPrice: 11500, stock: 18 },
-    { sku: 'GEN-007', name: 'Cargador', presentacion: null, description: 'Cargador celular USB', unidadVenta: 'UNIDAD' as const, costPrice: 12000, sellingPrice: 18000, stock: 8 },
-    { sku: 'GEN-008', name: 'Agenda', presentacion: null, description: 'Agenda 2026', unidadVenta: 'UNIDAD' as const, costPrice: 15000, sellingPrice: 22000, stock: 10 },
-    { sku: 'GEN-009', name: 'Cuaderno', presentacion: null, description: 'Cuaderno 100 hojas', unidadVenta: 'UNIDAD' as const, costPrice: 2500, sellingPrice: 3500, stock: 45 },
-    { sku: 'GEN-010', name: 'Lápiz', presentacion: null, description: 'Lápiz grafito HB', unidadVenta: 'UNIDAD' as const, costPrice: 300, sellingPrice: 600, stock: 120 },
+    { sku: 'GEN-001', name: 'Cigarrillo', presentacion: null, description: 'Cigarrillo Portland 10u', unidadVenta: 'UNIDAD' as const, costPrice: 5500, sellingPrice: 7000, stock: 50, sortOrder: 700 },
+    { sku: 'GEN-002', name: 'Fósforo', presentacion: null, description: 'Caja de fósforos', unidadVenta: 'UNIDAD' as const, costPrice: 400, sellingPrice: 800, stock: 80, sortOrder: 701 },
+    { sku: 'GEN-003', name: 'Vela', presentacion: null, description: 'Vela blanca 1u', unidadVenta: 'UNIDAD' as const, costPrice: 1200, sellingPrice: 1800, stock: 30, sortOrder: 702 },
+    { sku: 'GEN-004', name: 'Encendedor', presentacion: null, description: 'Encendedor desechable', unidadVenta: 'UNIDAD' as const, costPrice: 500, sellingPrice: 1000, stock: 65, sortOrder: 703 },
+    { sku: 'GEN-005', name: 'Bolsa Basura', presentacion: null, description: 'Bolsa de basura 30u', unidadVenta: 'UNIDAD' as const, costPrice: 2200, sellingPrice: 3200, stock: 40, sortOrder: 704 },
+    { sku: 'GEN-006', name: 'Pilas', presentacion: null, description: 'Pilas alcalinas AA 4u', unidadVenta: 'UNIDAD' as const, costPrice: 8500, sellingPrice: 11500, stock: 18, sortOrder: 705 },
+    { sku: 'GEN-007', name: 'Cargador', presentacion: null, description: 'Cargador celular USB', unidadVenta: 'UNIDAD' as const, costPrice: 12000, sellingPrice: 18000, stock: 8, sortOrder: 706 },
+    { sku: 'GEN-008', name: 'Agenda', presentacion: null, description: 'Agenda 2026', unidadVenta: 'UNIDAD' as const, costPrice: 15000, sellingPrice: 22000, stock: 10, sortOrder: 707 },
+    { sku: 'GEN-009', name: 'Cuaderno', presentacion: null, description: 'Cuaderno 100 hojas', unidadVenta: 'UNIDAD' as const, costPrice: 2500, sellingPrice: 3500, stock: 45, sortOrder: 708 },
+    { sku: 'GEN-010', name: 'Lápiz', presentacion: null, description: 'Lápiz grafito HB', unidadVenta: 'UNIDAD' as const, costPrice: 300, sellingPrice: 600, stock: 120, sortOrder: 709 },
   ];
 
   for (const p of general) {

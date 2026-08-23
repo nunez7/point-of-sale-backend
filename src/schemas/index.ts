@@ -44,6 +44,7 @@ export const productSchema = z.object({
   storeId: z.string().min(1),
   costPrice: positiveDecimal,
   sellingPrice: positiveDecimal,
+  sortOrder: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
 });
 

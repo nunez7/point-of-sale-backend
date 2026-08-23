@@ -86,16 +86,19 @@ export async function listProducts(filters: ProductFilters) {
 
   const dir = filters.sortOrder ?? 'asc';
   // Al ordenar por categoría se desempata por nombre para un listado estable.
+  // Sin sortBy (POS), se usa sortOrder como criterio principal.
   const orderBy: Prisma.ProductOrderByWithRelationInput[] =
-    filters.sortBy === 'category'
-      ? [{ category: { name: dir } }, { name: 'asc' }]
-      : filters.sortBy === 'sku'
-        ? [{ sku: dir }]
-        : filters.sortBy === 'costPrice'
-          ? [{ costPrice: dir }]
-          : filters.sortBy === 'sellingPrice'
-            ? [{ sellingPrice: dir }]
-            : [{ name: dir }];
+    !filters.sortBy
+      ? [{ sortOrder: 'asc' }, { name: 'asc' }]
+      : filters.sortBy === 'category'
+        ? [{ category: { name: dir } }, { sortOrder: 'asc' }, { name: 'asc' }]
+        : filters.sortBy === 'sku'
+          ? [{ sku: dir }]
+          : filters.sortBy === 'costPrice'
+            ? [{ costPrice: dir }]
+            : filters.sortBy === 'sellingPrice'
+              ? [{ sellingPrice: dir }]
+              : [{ sortOrder: 'asc' }, { name: dir }];
 
   const baseArgs = {
     where,
@@ -150,6 +153,7 @@ export interface CreateProductInput {
   storeId: string;
   costPrice: number;
   sellingPrice: number;
+  sortOrder?: number;
   isActive?: boolean;
 }
 
@@ -169,6 +173,7 @@ export async function createProduct(data: CreateProductInput, userId: string) {
           storeId: data.storeId,
           costPrice: data.costPrice,
           sellingPrice: data.sellingPrice,
+          sortOrder: data.sortOrder ?? 0,
           isActive: data.isActive ?? true,
         },
         include: { category: true },
@@ -230,6 +235,7 @@ export async function updateProduct(
         ...(data.categoryId !== undefined && { categoryId: data.categoryId ?? null }),
         ...(data.costPrice !== undefined && { costPrice: data.costPrice }),
         ...(data.sellingPrice !== undefined && { sellingPrice: data.sellingPrice }),
+        ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
       },
       include: { category: true },
