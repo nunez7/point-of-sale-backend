@@ -81,7 +81,7 @@ export async function corteCaja(storeId: string, date?: string, operatorId?: str
 
   const sales = await prisma.sale.findMany({
     where,
-    include: { items: { include: { product: { include: { category: true } } } } },
+    include: { items: { include: { product: { include: { category: true } } } }, user: { select: { id: true, name: true } } },
   });
 
   let totalRevenue = new Prisma.Decimal(0);
@@ -128,6 +128,21 @@ export async function corteCaja(storeId: string, date?: string, operatorId?: str
       })
     : cancelledCount;
 
+  // Canceladas detalladas para mostrar movimientos
+  const cancelledSales = await prisma.sale.findMany({
+    where: {
+      storeId,
+      status: 'CANCELED',
+      canceledAt: { gte: desde, lte: hasta },
+      ...(operatorId ? { userId: operatorId } : {}),
+    },
+    include: {
+      items: { include: { product: true } },
+      user: { select: { id: true, name: true } },
+    },
+    orderBy: { canceledAt: 'desc' },
+  });
+
   // Group by hour
   const byHour = new Map<number, { count: number; totalRevenue: number }>();
   for (const sale of sales) {
@@ -145,6 +160,25 @@ export async function corteCaja(storeId: string, date?: string, operatorId?: str
 
   const revenue = Number(totalRevenue);
   const count = sales.length;
+
+  // Individual sales for detail view with reprint capability
+  const salesDetail = sales.map((sale) => ({
+    id: sale.id,
+    saleNumber: sale.saleNumber,
+    createdAt: sale.createdAt.toISOString(),
+    userId: sale.userId,
+    userName: sale.user?.name ?? '—',
+    total: Number(sale.total),
+    discount: Number(sale.discount),
+    paymentMethod: sale.paymentMethod,
+    status: sale.status,
+    items: sale.items.map((it) => ({
+      productName: it.product.name,
+      quantity: Number(it.quantity),
+      unitPrice: Number(it.unitPrice),
+      unidad: it.product.unidadVenta,
+    })),
+  }));
 
   return {
     storeId,
@@ -166,6 +200,24 @@ export async function corteCaja(storeId: string, date?: string, operatorId?: str
         count: v.count,
         totalRevenue: Number(v.totalRevenue),
       })),
+    sales: salesDetail,
+    cancelledSales: cancelledSales.map((sale) => ({
+      id: sale.id,
+      saleNumber: sale.saleNumber,
+      createdAt: sale.createdAt.toISOString(),
+      canceledAt: sale.canceledAt?.toISOString() ?? null,
+      userId: sale.userId,
+      userName: sale.user?.name ?? '—',
+      total: Number(sale.total),
+      discount: Number(sale.discount),
+      paymentMethod: sale.paymentMethod,
+      items: sale.items.map((it) => ({
+        productName: it.product.name,
+        quantity: Number(it.quantity),
+        unitPrice: Number(it.unitPrice),
+        unidad: it.product.unidadVenta,
+      })),
+    })),
   };
 }
 

@@ -216,6 +216,7 @@ function serializeSale<
     discount: Prisma.Decimal | number;
     profit: Prisma.Decimal | number;
     profitMargin: Prisma.Decimal | number;
+    status: string;
     items: Array<{
       quantity: Prisma.Decimal | number;
       unitPrice: Prisma.Decimal | number;
@@ -231,6 +232,7 @@ function serializeSale<
     discount: Number(sale.discount),
     profit: Number(sale.profit),
     profitMargin: Number(sale.profitMargin),
+    status: sale.status,
     items: sale.items.map((it) => ({
       ...it,
       quantity: Number(it.quantity),
