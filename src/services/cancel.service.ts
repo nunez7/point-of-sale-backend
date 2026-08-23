@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma';
-import { CancellationReason } from '@prisma/client';
+import { CancellationReason, Prisma } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
 import { parseLocalDate } from '../utils/dates';
 
@@ -195,6 +195,7 @@ export async function confirmCancellation(
     // Fetch the entity directly by its database ID (not by code)
     let entityNumber = '';
     let createdAt: Date;
+    let total = new Prisma.Decimal(0);
 
     switch (entityType) {
       case 'SALE': {
@@ -210,6 +211,7 @@ export async function confirmCancellation(
         }
         entityNumber = sale.saleNumber;
         createdAt = sale.createdAt;
+        total = sale.total;
 
         const { allowed, hoursLeft } = validateWithin24Hours(createdAt);
         if (!allowed) {
@@ -252,6 +254,7 @@ export async function confirmCancellation(
         }
         entityNumber = factura.folio;
         createdAt = factura.createdAt;
+        total = factura.total;
 
         const { allowed, hoursLeft } = validateWithin24Hours(createdAt);
         if (!allowed) {
@@ -286,6 +289,7 @@ export async function confirmCancellation(
         }
         entityNumber = stx.id;
         createdAt = stx.createdAt;
+        total = stx.total;
 
         const { allowed, hoursLeft } = validateWithin24Hours(createdAt);
         if (!allowed) {
@@ -339,6 +343,7 @@ export async function confirmCancellation(
         entityType,
         entityId,
         entityNumber,
+        total,
         reason,
         comment: comment ?? null,
       },

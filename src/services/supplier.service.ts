@@ -264,6 +264,7 @@ export async function cancelSupplierTransaction(
           entityType: 'SUPPLIER_TRANSACTION',
           entityId: id,
           entityNumber: id,
+          total: txRecord.total,
           reason,
           comment: comment ?? null,
         },

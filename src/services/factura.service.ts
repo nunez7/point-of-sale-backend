@@ -282,6 +282,7 @@ export async function cancelarFactura(
           entityType: 'FACTURA',
           entityId: id,
           entityNumber: factura.folio,
+          total: factura.total,
           reason,
           comment: comment ?? null,
         },

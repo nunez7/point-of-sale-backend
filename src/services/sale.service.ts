@@ -350,6 +350,7 @@ export async function cancelSale(
           entityType: 'SALE',
           entityId: id,
           entityNumber: sale.saleNumber,
+          total: sale.total,
           reason,
           comment: comment ?? null,
         },
