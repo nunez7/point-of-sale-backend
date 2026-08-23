@@ -174,13 +174,13 @@ export async function lookupEntity(
   }
 }
 
-function validateWithin24Hours(createdAt: Date | string): { allowed: boolean; hoursLeft: number } {
+function validateWithinHours(createdAt: Date | string, maxHours: number = MAX_CANCELLATION_HOURS): { allowed: boolean; hoursLeft: number } {
   const now = new Date();
   const created = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
   const diffMs = now.getTime() - created.getTime();
   const diffHours = diffMs / (1000 * 60 * 60);
-  const hoursLeft = Math.max(0, MAX_CANCELLATION_HOURS - diffHours);
-  return { allowed: diffHours <= MAX_CANCELLATION_HOURS, hoursLeft };
+  const hoursLeft = Math.max(0, maxHours - diffHours);
+  return { allowed: diffHours <= maxHours, hoursLeft };
 }
 
 export async function confirmCancellation(
@@ -213,7 +213,7 @@ export async function confirmCancellation(
         createdAt = sale.createdAt;
         total = sale.total;
 
-        const { allowed, hoursLeft } = validateWithin24Hours(createdAt);
+        const { allowed, hoursLeft } = validateWithinHours(createdAt);
         if (!allowed) {
           throw ApiError.badRequest(
             `Solo se puede cancelar dentro de las ${MAX_CANCELLATION_HOURS} horas posteriores a la operación. Tiempo restante: ${hoursLeft.toFixed(1)} horas`,
@@ -256,10 +256,10 @@ export async function confirmCancellation(
         createdAt = factura.createdAt;
         total = factura.total;
 
-        const { allowed, hoursLeft } = validateWithin24Hours(createdAt);
+        const { allowed, hoursLeft } = validateWithinHours(createdAt, 72);
         if (!allowed) {
           throw ApiError.badRequest(
-            `Solo se puede cancelar dentro de las ${MAX_CANCELLATION_HOURS} horas posteriores a la operación. Tiempo restante: ${hoursLeft.toFixed(1)} horas`,
+            `Solo se puede cancelar dentro de los 3 días (72 horas) posteriores a la emisión. Tiempo restante: ${hoursLeft.toFixed(1)} horas`,
             'CANCEL_WINDOW_EXPIRED'
           );
         }
@@ -291,7 +291,7 @@ export async function confirmCancellation(
         createdAt = stx.createdAt;
         total = stx.total;
 
-        const { allowed, hoursLeft } = validateWithin24Hours(createdAt);
+        const { allowed, hoursLeft } = validateWithinHours(createdAt);
         if (!allowed) {
           throw ApiError.badRequest(
             `Solo se puede cancelar dentro de las ${MAX_CANCELLATION_HOURS} horas posteriores a la operación. Tiempo restante: ${hoursLeft.toFixed(1)} horas`,
