@@ -1,7 +1,8 @@
 import { prisma } from '../config/prisma';
+import { Prisma } from '@prisma/client';
 
 export async function getInventoryByStore(storeId: string) {
-  return prisma.inventory.findMany({
+  const inventories = await prisma.inventory.findMany({
     where: { storeId },
     include: {
       product: {
@@ -10,6 +11,9 @@ export async function getInventoryByStore(storeId: string) {
     },
     orderBy: { product: { name: 'asc' } },
   });
+
+  // Decimal → número al borde del servicio para que el frontend lo consuma.
+  return inventories.map((inv) => ({ ...inv, quantity: Number(inv.quantity) }));
 }
 
 export async function getLowStock(storeId: string) {
@@ -19,9 +23,10 @@ export async function getLowStock(storeId: string) {
   });
 
   return inventories
-    .filter((inv) => inv.quantity <= inv.lowStockThreshold)
+    .filter((inv) => new Prisma.Decimal(inv.quantity).lessThanOrEqualTo(inv.lowStockThreshold))
     .map((inv) => ({
       ...inv,
+      quantity: Number(inv.quantity),
       lowStock: true,
     }));
 }

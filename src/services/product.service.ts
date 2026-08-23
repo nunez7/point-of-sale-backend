@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, UnidadVenta } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
 
@@ -144,6 +144,8 @@ export interface CreateProductInput {
   name: string;
   sku?: string | null;
   description?: string | null;
+  presentacion?: string | null;
+  unidadVenta?: UnidadVenta;
   categoryId?: string | null;
   storeId: string;
   costPrice: number;
@@ -161,6 +163,8 @@ export async function createProduct(data: CreateProductInput, userId: string) {
           // Si no se envía SKU se genera uno automático: PRODUCT-001, PRODUCT-002, ...
           sku: sku ?? (await generarSkuAutomatico(tx)),
           description: data.description ?? undefined,
+          presentacion: data.presentacion?.trim() ? data.presentacion.trim() : undefined,
+          unidadVenta: data.unidadVenta ?? 'UNIDAD',
           categoryId: data.categoryId ?? undefined,
           storeId: data.storeId,
           costPrice: data.costPrice,
@@ -184,7 +188,13 @@ export async function createProduct(data: CreateProductInput, userId: string) {
         action: 'CREATE',
         entity: 'PRODUCT',
         entityId: product.id,
-        metadata: { name: product.name, costPrice: data.costPrice, sellingPrice: data.sellingPrice },
+        metadata: {
+          name: product.name,
+          costPrice: data.costPrice,
+          sellingPrice: data.sellingPrice,
+          presentacion: product.presentacion,
+          unidadVenta: product.unidadVenta,
+        },
       },
     });
 
@@ -213,6 +223,10 @@ export async function updateProduct(
             sku: data.sku?.trim() ? data.sku.trim() : null,
           }),
         ...(data.description !== undefined && { description: data.description ?? null }),
+        ...(data.presentacion !== undefined && {
+          presentacion: data.presentacion?.trim() ? data.presentacion.trim() : null,
+        }),
+        ...(data.unidadVenta !== undefined && { unidadVenta: data.unidadVenta }),
         ...(data.categoryId !== undefined && { categoryId: data.categoryId ?? null }),
         ...(data.costPrice !== undefined && { costPrice: data.costPrice }),
         ...(data.sellingPrice !== undefined && { sellingPrice: data.sellingPrice }),

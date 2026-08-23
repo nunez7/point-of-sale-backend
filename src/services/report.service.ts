@@ -215,8 +215,8 @@ export async function productsReport(storeId: string) {
       revenue: 0,
       profit: 0,
     };
-    entry.quantity += item.quantity;
-    entry.revenue += Number(item.unitPrice) * item.quantity;
+    entry.quantity += Number(item.quantity);
+    entry.revenue += Number(item.unitPrice) * Number(item.quantity);
     entry.profit += Number(item.profit);
     perProduct.set(item.productId, entry);
   }
@@ -248,7 +248,7 @@ export async function profitMarginByCategory(storeId: string) {
   for (const item of saleItems) {
     const catName = item.product.category?.name ?? 'Sin categoría';
     const entry = perCategory.get(catName) ?? { revenue: 0, profit: 0 };
-    entry.revenue += Number(item.unitPrice) * item.quantity;
+    entry.revenue += Number(item.unitPrice) * Number(item.quantity);
     entry.profit += Number(item.profit);
     perCategory.set(catName, entry);
   }

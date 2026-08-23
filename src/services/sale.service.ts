@@ -22,6 +22,18 @@ export interface SaleResult {
 
 type Tx = Prisma.TransactionClient;
 
+// Etiqueta corta para el snapshot de la línea de venta ("u", "kg", "L").
+function etiquetaUnidad(unidadVenta: string): string {
+  switch (unidadVenta) {
+    case 'PESO':
+      return 'kg';
+    case 'VOLUMEN':
+      return 'L';
+    default:
+      return 'u';
+  }
+}
+
 async function generateSaleNumber(tx: Tx, storeId: string, code: string): Promise<string> {
   const store = await tx.store.update({
     where: { id: storeId },
@@ -44,6 +56,7 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
     const preparedItems: Array<{
       productId: string;
       quantity: number;
+      unidad: string;
       unitPrice: number;
       costPrice: Prisma.Decimal;
       unitProfit: Prisma.Decimal;
@@ -66,14 +79,26 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
         throw ApiError.badRequest('Producto no encontrado', 'PRODUCT_NOT_FOUND');
       }
 
+      // Los productos por unidad solo admiten cantidades enteras; el granel
+      // (peso/volumen) admite hasta 3 decimales (gramos/ml).
+      if (
+        product.unidadVenta === 'UNIDAD' &&
+        !Number.isInteger(item.quantity)
+      ) {
+        throw ApiError.badRequest(
+          `"${product.name}" se vende por unidad: la cantidad debe ser un número entero`,
+          'INVALID_QUANTITY'
+        );
+      }
+
       const inventory = await tx.inventory.findUnique({
         where: { storeId_productId: { storeId: input.storeId, productId: product.id } },
       });
 
-      const stock = inventory?.quantity ?? 0;
-      if (stock < item.quantity) {
+      const stock = inventory?.quantity ?? new Prisma.Decimal(0);
+      if (new Prisma.Decimal(stock).lessThan(item.quantity)) {
         throw ApiError.badRequest(
-          `Stock insuficiente para "${product.name}" (disponible: ${stock})`,
+          `Stock insuficiente para "${product.name}" (disponible: ${Number(stock)})`,
           'INSUFFICIENT_STOCK'
         );
       }
@@ -89,6 +114,7 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
       preparedItems.push({
         productId: product.id,
         quantity: item.quantity,
+        unidad: etiquetaUnidad(product.unidadVenta),
         unitPrice: item.unitPrice,
         costPrice,
         unitProfit,
@@ -126,6 +152,7 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
           create: preparedItems.map((it) => ({
             productId: it.productId,
             quantity: it.quantity,
+            unidad: it.unidad,
             unitPrice: it.unitPrice,
             costPrice: it.costPrice,
             profit: new Prisma.Decimal(it.unitPrice)
@@ -190,6 +217,7 @@ function serializeSale<
     profit: Prisma.Decimal | number;
     profitMargin: Prisma.Decimal | number;
     items: Array<{
+      quantity: Prisma.Decimal | number;
       unitPrice: Prisma.Decimal | number;
       costPrice: Prisma.Decimal | number;
       profit: Prisma.Decimal | number;
@@ -205,6 +233,7 @@ function serializeSale<
     profitMargin: Number(sale.profitMargin),
     items: sale.items.map((it) => ({
       ...it,
+      quantity: Number(it.quantity),
       unitPrice: Number(it.unitPrice),
       costPrice: Number(it.costPrice),
       profit: Number(it.profit),

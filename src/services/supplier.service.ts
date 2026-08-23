@@ -80,7 +80,7 @@ export async function updateSupplier(
 }
 
 export async function getSupplierTransactions(supplierId: string, storeId: string) {
-  return prisma.supplierTransaction.findMany({
+  const transactions = await prisma.supplierTransaction.findMany({
     where: { supplierId, storeId },
     include: {
       items: { include: { product: true } },
@@ -88,6 +88,18 @@ export async function getSupplierTransactions(supplierId: string, storeId: strin
     },
     orderBy: { createdAt: 'desc' },
   });
+
+  // Los Decimal de Prisma se serializan como string en JSON; el frontend
+  // espera números (p. ej. reduce() para contar artículos).
+  return transactions.map((tx) => ({
+    ...tx,
+    total: Number(tx.total),
+    items: tx.items.map((it) => ({
+      ...it,
+      quantity: Number(it.quantity),
+      unitCost: Number(it.unitCost),
+    })),
+  }));
 }
 
 export interface CreateSupplierTxInput {

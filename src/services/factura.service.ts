@@ -69,7 +69,7 @@ export async function buscarVentaPorNumero(saleNumber: string, storeId: string) 
     subtotal: Number(sale.subtotal),
     descuento: Number(sale.discount),
     total: Number(sale.total),
-    articulos: sale.items.reduce((acc, item) => acc + item.quantity, 0),
+    articulos: sale.items.reduce((acc, item) => acc + Number(item.quantity), 0),
     estado: sale.status,
     factura,
   };
@@ -230,7 +230,21 @@ export async function obtenerFactura(id: string, storeId: string) {
   if (!factura) {
     throw ApiError.notFound('Factura no encontrada', 'FACTURA_NOT_FOUND');
   }
-  return factura;
+  // Decimal → número al borde del servicio para que el frontend lo consuma.
+  return {
+    ...factura,
+    subtotal: Number(factura.subtotal),
+    descuento: Number(factura.descuento),
+    total: Number(factura.total),
+    sale: {
+      ...factura.sale,
+      items: factura.sale.items.map((it) => ({
+        ...it,
+        quantity: Number(it.quantity),
+        unitPrice: Number(it.unitPrice),
+      })),
+    },
+  };
 }
 
 export async function cancelarFactura(id: string, storeId: string, userId: string) {

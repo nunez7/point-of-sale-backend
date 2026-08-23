@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaymentMethod, Role } from '@prisma/client';
+import { PaymentMethod, Role, UnidadVenta } from '@prisma/client';
 
 export const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -20,10 +20,26 @@ export const paymentMethodSchema = z.enum(
 
 const positiveDecimal = z.number().positive('Debe ser mayor a 0');
 
+// Cantidad para productos a granel: admite hasta 3 decimales (gramos/ml).
+const cantidadPositiva = z
+  .number()
+  .positive('Cantidad debe ser mayor a 0')
+  .refine((v) => Math.abs(v * 1000 - Math.round(v * 1000)) < 1e-6, {
+    message: 'La cantidad admite máximo 3 decimales',
+  });
+
 export const productSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
   sku: z.string().optional().nullable(),
-  description: z.string().optional().nullable(),
+  description: z.string().max(500, 'Máximo 500 caracteres').optional().nullable(),
+  presentacion: z
+    .string()
+    .trim()
+    .min(1, 'La presentación no puede estar vacía')
+    .max(50, 'Máximo 50 caracteres')
+    .optional()
+    .nullable(),
+  unidadVenta: z.nativeEnum(UnidadVenta).default(UnidadVenta.UNIDAD),
   categoryId: z.string().optional().nullable(),
   storeId: z.string().min(1),
   costPrice: positiveDecimal,
@@ -59,7 +75,7 @@ export const categoryUpdateSchema = categorySchema
 
 export const saleItemSchema = z.object({
   productId: z.string().min(1),
-  quantity: z.number().int('Cantidad debe ser entero').positive('Cantidad debe ser mayor a 0'),
+  quantity: cantidadPositiva,
   unitPrice: positiveDecimal,
 });
 
@@ -88,7 +104,7 @@ export const supplierUpdateSchema = supplierSchema.partial();
 
 export const supplierTxItemSchema = z.object({
   productId: z.string().min(1),
-  quantity: z.number().int().positive(),
+  quantity: cantidadPositiva,
   unitCost: positiveDecimal,
 });
 

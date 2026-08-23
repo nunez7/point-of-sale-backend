@@ -10,7 +10,7 @@ async function main() {
     create: { name: 'Tienda Central', code: 'STORE001', address: 'Av. Principal 123' },
   });
 
-  const adminPassword = await bcrypt.hash('admin123', 10);
+  const adminPassword = await bcrypt.hash('12345678', 10);
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@servicaja.com' },
@@ -69,6 +69,90 @@ async function main() {
     },
   });
 
+  // Ejemplos de abarrotes: una misma marca con varias presentaciones
+  // (cada presentación es su propio registro con SKU y precio) y dos
+  // productos a granel vendidos por peso (kg) y volumen (L).
+  const productosAbarrotes = [
+    {
+      sku: 'PROD-CAFE-CH',
+      name: 'Café Águila Roja',
+      presentacion: 'CH',
+      description: 'Presentación chica (100 g)',
+      unidadVenta: 'UNIDAD' as const,
+      costPrice: 3500,
+      sellingPrice: 5500,
+      stock: 40,
+    },
+    {
+      sku: 'PROD-CAFE-MD',
+      name: 'Café Águila Roja',
+      presentacion: 'MD',
+      description: 'Presentación mediana (250 g)',
+      unidadVenta: 'UNIDAD' as const,
+      costPrice: 8000,
+      sellingPrice: 12500,
+      stock: 30,
+    },
+    {
+      sku: 'PROD-CAFE-GD',
+      name: 'Café Águila Roja',
+      presentacion: 'GD',
+      description: 'Presentación grande (500 g)',
+      unidadVenta: 'UNIDAD' as const,
+      costPrice: 15000,
+      sellingPrice: 23000,
+      stock: 20,
+    },
+    {
+      sku: 'PROD-ARROZ-GRANEL',
+      name: 'Arroz a granel',
+      presentacion: null,
+      description: 'Se vende por peso; el precio es por kilogramo',
+      unidadVenta: 'PESO' as const,
+      costPrice: 3200,
+      sellingPrice: 4800,
+      stock: 25.5,
+    },
+    {
+      sku: 'PROD-MIEL-GRANEL',
+      name: 'Miel pura a granel',
+      presentacion: null,
+      description: 'Se vende por volumen; el precio es por litro',
+      unidadVenta: 'VOLUMEN' as const,
+      costPrice: 9000,
+      sellingPrice: 14000,
+      stock: 10.75,
+    },
+  ];
+
+  for (const p of productosAbarrotes) {
+    const creado = await prisma.product.upsert({
+      where: { sku: p.sku },
+      update: {},
+      create: {
+        name: p.name,
+        sku: p.sku,
+        description: p.description,
+        presentacion: p.presentacion,
+        unidadVenta: p.unidadVenta,
+        storeId: store.id,
+        categoryId: categories[1].id,
+        costPrice: p.costPrice,
+        sellingPrice: p.sellingPrice,
+      },
+    });
+    await prisma.inventory.upsert({
+      where: { storeId_productId: { storeId: store.id, productId: creado.id } },
+      update: {},
+      create: {
+        storeId: store.id,
+        productId: creado.id,
+        quantity: p.stock,
+        lowStockThreshold: 5,
+      },
+    });
+  }
+
   // eslint-disable-next-line no-console
   console.log('Seed completado:');
   // eslint-disable-next-line no-console
@@ -79,6 +163,8 @@ async function main() {
   console.log(`  Categorías: ${categories.map((c) => c.name).join(', ')}`);
   // eslint-disable-next-line no-console
   console.log(`  Producto: ${product.name} (stock 100)`);
+  // eslint-disable-next-line no-console
+  console.log(`  Abarrotes: ${productosAbarrotes.length} productos (presentaciones y granel)`);
 }
 
 main()
