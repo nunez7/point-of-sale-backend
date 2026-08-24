@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaymentMethod, Role, UnidadVenta, CancellationReason } from '@prisma/client';
+import { PaymentMethod, Role, UnidadVenta, CancellationReason, MovementTipo } from '@prisma/client';
 
 export const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -337,4 +337,61 @@ export const cancelationsQuerySchema = z.object({
     .optional(),
   entityType: z.enum(['SALE', 'FACTURA', 'SUPPLIER_TRANSACTION']).optional(),
   reason: z.nativeEnum(CancellationReason).optional(),
+});
+
+// ---------- Motivos de movimiento de inventario ----------
+
+export const movementReasonSchema = z.object({
+  name: z.string().min(1, 'El nombre es requerido').max(80, 'Máximo 80 caracteres'),
+  tipo: z.nativeEnum(MovementTipo, {
+    errorMap: () => ({ message: 'Tipo de movimiento inválido' }),
+  }),
+  departamento: z.string().max(50, 'Máximo 50 caracteres').optional().nullable(),
+  isActive: z.boolean().optional(),
+});
+
+export const movementReasonUpdateSchema = movementReasonSchema
+  .partial()
+  .refine((d) => Object.keys(d).length > 0, {
+    message: 'Debe enviar al menos un campo a actualizar',
+  });
+
+// ---------- Movimientos de inventario ----------
+
+export const stockMovementSchema = z.object({
+  productId: z.string().min(1, 'El producto es requerido'),
+  reasonId: z.string().min(1, 'El motivo es requerido'),
+  quantity: cantidadPositiva,
+  comment: z.string().max(500, 'Máximo 500 caracteres').optional().nullable(),
+});
+
+export const stockMovementQuerySchema = z.object({
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha inicial debe tener formato YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
+    .optional(),
+  productId: z.string().optional(),
+  tipo: z.nativeEnum(MovementTipo).optional(),
+  reasonId: z.string().optional(),
+  status: z.enum(['ACTIVE', 'CANCELLED']).optional(),
+});
+
+export const cancelMovementSchema = z.object({
+  cancellationReason: z.string().min(1, 'El motivo de anulación es requerido').max(100),
+  cancellationComment: z
+    .string()
+    .max(500, 'Máximo 500 caracteres')
+    .optional()
+    .nullable(),
+});
+
+export const inventoryOpeningQuerySchema = z.object({
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe tener formato YYYY-MM-DD')
+    .optional(),
 });

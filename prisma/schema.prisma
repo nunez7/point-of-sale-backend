@@ -45,6 +45,14 @@ enum CancellationReason {
   OTRO
 }
 
+// Tipo de movimiento de inventario manual:
+// - ENTRADA: suma stock (ajuste positivo, devolución, reabasto manual).
+// - SALIDA: resta stock (merma, producto echado a perder, pérdida, venta no registrada).
+enum MovementTipo {
+  ENTRADA
+  SALIDA
+}
+
 model Store {
   id        String   @id @default(cuid())
   name      String
@@ -71,6 +79,9 @@ model Store {
   clientes       Cliente[]
   facturas       Factura[]
   cancellations  Cancellation[]
+  movementReasons MovementReason[]
+  stockMovements  StockMovement[]
+  inventorySnapshots InventorySnapshot[]
 }
 
 model User {
@@ -92,6 +103,7 @@ model User {
   revokedTokens    RevokedToken[]
   facturas         Factura[]
   cancellations    Cancellation[]
+  stockMovements   StockMovement[]
 }
 
 model RevokedToken {
@@ -137,6 +149,7 @@ model Product {
   inventories          Inventory[]
   saleItems            SaleItem[]
   supplierTxItems      SupplierTransactionItem[]
+  stockMovements       StockMovement[]
 
   @@index([storeId])
 }
@@ -153,6 +166,70 @@ model Inventory {
 
   @@unique([storeId, productId])
   @@index([productId])
+}
+
+// Motivo editable de un movimiento de inventario (merma, caducado, robo, reabasto, etc.).
+// La lista es por tienda y se administra desde el módulo de inventario.
+model MovementReason {
+  id           String        @id @default(cuid())
+  storeId      String
+  store        Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name         String
+  tipo         MovementTipo
+  departamento String?       // abarrotes, cremería, etc. (opcional, para agrupar)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  movements    StockMovement[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
+}
+
+// Bitácora de movimientos manuales de inventario. Cada fila ajusta Inventory.quantity
+// de forma atómica y guarda el saldo antes/después para trazabilidad.
+model StockMovement {
+  id                  String         @id @default(cuid())
+  storeId             String
+  store               Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId           String
+  product             Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId              String
+  user                User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  reasonId            String
+  reason              MovementReason @relation(fields: [reasonId], references: [id])
+  tipo                MovementTipo
+  quantity            Decimal        @db.Decimal(12, 3)
+  balanceBefore       Decimal        @db.Decimal(12, 3)
+  balanceAfter        Decimal        @db.Decimal(12, 3)
+  unitCost            Decimal        @db.Decimal(12, 2)  // costo del producto al momento del movimiento
+  comment             String?
+  status              String         @default("ACTIVE")   // ACTIVE | CANCELLED
+  cancelledAt         DateTime?
+  cancelledBy         String?
+  cancellationReason  String?
+  cancellationComment String?
+  createdAt           DateTime       @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([productId])
+  @@index([reasonId])
+}
+
+// Snapshot de apertura del día: captura el stock al iniciar operaciones.
+// Si existe para la fecha, el reporte usa este valor como "inventario inicial";
+// de lo contrario se reconstruye a partir de ventas/compras/movimientos del día.
+model InventorySnapshot {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId String
+  date      DateTime
+  quantity  Decimal  @db.Decimal(12, 3)
+  createdAt DateTime @default(now())
+
+  @@unique([storeId, productId, date])
+  @@index([storeId, date])
 }
 
 model Sale {

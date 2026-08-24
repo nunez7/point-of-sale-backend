@@ -2,6 +2,7 @@ import { prisma } from '../config/prisma';
 import { Prisma } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
 import { parseLocalDate } from '../utils/dates';
+import { getInventoryReport } from './stockMovement.service';
 
 function startOfDay(dateStr?: string): Date {
   const base = dateStr ? parseLocalDate(dateStr) : new Date();
@@ -58,6 +59,7 @@ export async function dailyReport(storeId: string, date?: string) {
     profitMargin,
     averageTicket: count > 0 ? totalSales / count : 0,
     salesByPayment,
+    inventario: await getInventoryReport(storeId, date),
   };
 
   return result;
@@ -218,6 +220,7 @@ export async function corteCaja(storeId: string, date?: string, operatorId?: str
         unidad: it.product.unidadVenta,
       })),
     })),
+    inventario: await getInventoryReport(storeId, date),
   };
 }
 

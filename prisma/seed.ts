@@ -44,6 +44,42 @@ async function main() {
     categories.push(category);
   }
 
+  // ─── Motivos de movimiento de inventario (editables luego) ──
+  const motivosBase: Array<{
+    name: string;
+    tipo: 'ENTRADA' | 'SALIDA';
+    departamento?: string | null;
+  }> = [
+    // ENTRADA (suma stock)
+    { name: 'Ajuste positivo (conteo físico)', tipo: 'ENTRADA' },
+    { name: 'Devolución de cliente', tipo: 'ENTRADA' },
+    { name: 'Producto reubicado o encontrado', tipo: 'ENTRADA' },
+    { name: 'Compra no registrada', tipo: 'ENTRADA' },
+    // SALIDA (resta stock: merma, pérdida, etc.)
+    { name: 'Merma / producto echado a perder', tipo: 'SALIDA', departamento: 'Abarrotes' },
+    { name: 'Caducado / vencido', tipo: 'SALIDA' },
+    { name: 'Rotura / daño accidental', tipo: 'SALIDA' },
+    { name: 'Robo / extravío', tipo: 'SALIDA' },
+    { name: 'Venta no registrada', tipo: 'SALIDA' },
+    { name: 'Degustación / muestra', tipo: 'SALIDA' },
+    { name: 'Traslado a otra sucursal', tipo: 'SALIDA' },
+    { name: 'Error de captura en venta', tipo: 'SALIDA' },
+  ];
+
+  for (const m of motivosBase) {
+    await prisma.movementReason.upsert({
+      where: { storeId_name: { storeId: store.id, name: m.name } },
+      update: {},
+      create: {
+        storeId: store.id,
+        name: m.name,
+        tipo: m.tipo,
+        departamento: m.departamento ?? null,
+        isActive: true,
+      },
+    });
+  }
+
   // Helper: crear producto + inventario
   async function crearProducto(p: {
     sku: string;

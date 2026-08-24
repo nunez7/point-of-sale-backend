@@ -183,7 +183,6 @@ export function generateProductExcelTemplate(categories: CategoryRef[] = []): Bu
   ['A1', 'B1'].forEach((cell) => {
     if (wsCategories[cell]) wsCategories[cell].s = catHeaderStyle;
   });
-  XLSX.utils.book_append_sheet(wb, wsCategories, 'Categorías');
 
   const unidadVentaData: (string | number)[][] = [
     ['Valor', 'Descripción', 'Precio por'],
@@ -200,7 +199,6 @@ export function generateProductExcelTemplate(categories: CategoryRef[] = []): Bu
   ['A1', 'B1', 'C1'].forEach((cell) => {
     if (wsUnidadVenta[cell]) wsUnidadVenta[cell].s = uvHeaderStyle;
   });
-  XLSX.utils.book_append_sheet(wb, wsUnidadVenta, 'UnidadVenta');
 
   const instructionsData = [
     ['INSTRUCCIONES DE USO'],
