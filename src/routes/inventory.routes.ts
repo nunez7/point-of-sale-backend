@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   createMovement,
+  createMovementBatch,
   listMovements,
   cancelMovement,
   registerOpening,
@@ -17,6 +18,7 @@ import {
   movementReasonSchema,
   movementReasonUpdateSchema,
   stockMovementSchema,
+  stockMovementBatchSchema,
   stockMovementQuerySchema,
   cancelMovementSchema,
   inventoryOpeningQuerySchema,
@@ -72,6 +74,13 @@ router.post(
   requireRole(Role.ADMIN, Role.GERENTE),
   validate(stockMovementSchema),
   createMovement
+);
+router.post(
+  '/movements/batch',
+  requireAuth,
+  requireRole(Role.ADMIN, Role.GERENTE),
+  validate(stockMovementBatchSchema),
+  createMovementBatch
 );
 router.post(
   '/movements/:id/cancel',

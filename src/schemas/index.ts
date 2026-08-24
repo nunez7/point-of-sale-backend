@@ -365,6 +365,20 @@ export const stockMovementSchema = z.object({
   comment: z.string().max(500, 'Máximo 500 caracteres').optional().nullable(),
 });
 
+export const stockMovementBatchItemSchema = z.object({
+  productId: z.string().min(1, 'El producto es requerido'),
+  quantity: cantidadPositiva,
+  comment: z.string().max(500, 'Máximo 500 caracteres').optional().nullable(),
+});
+
+export const stockMovementBatchSchema = z.object({
+  reasonId: z.string().min(1, 'El motivo es requerido'),
+  comment: z.string().max(500, 'Máximo 500 caracteres').optional().nullable(),
+  items: z
+    .array(stockMovementBatchItemSchema)
+    .min(1, 'Debe incluir al menos un producto'),
+});
+
 export const stockMovementQuerySchema = z.object({
   startDate: z
     .string()
@@ -394,4 +408,12 @@ export const inventoryOpeningQuerySchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe tener formato YYYY-MM-DD')
     .optional(),
+});
+
+export const inventoryQuerySchema = z.object({
+  search: z.string().max(80, 'Máximo 80 caracteres').optional(),
+  page: z.string().optional(),
+  limit: z.string().optional(),
+  sortBy: z.enum(['name', 'category', 'quantity', 'lowStockThreshold']).optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
 });

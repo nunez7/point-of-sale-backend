@@ -19,6 +19,7 @@ import {
   productQuerySchema,
   idParamSchema,
   storeIdParamSchema,
+  inventoryQuerySchema,
 } from '../schemas';
 import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
@@ -33,6 +34,7 @@ router.get(
   '/inventory/:storeId',
   requireAuth,
   validate(storeIdParamSchema, 'params'),
+  validate(inventoryQuerySchema, 'query'),
   getInventory
 );
 router.get(

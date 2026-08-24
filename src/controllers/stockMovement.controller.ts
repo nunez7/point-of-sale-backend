@@ -21,6 +21,29 @@ export const createMovement = asyncAuthHandler(async (req: AuthedRequest, res: R
   res.status(201).json({ movement });
 });
 
+export const createMovementBatch = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const storeId = req.user!.storeId;
+  const { reasonId, comment, items } = req.body as {
+    reasonId: string;
+    comment?: string | null;
+    items: { productId: string; quantity: number; comment?: string | null }[];
+  };
+  const movements = await stockMovementService.createMovementBatch({
+    storeId,
+    userId: req.user!.id,
+    reasonId,
+    comment: comment ?? null,
+    items,
+  });
+
+  for (const m of movements) {
+    emitToStore(storeId, 'inventory:updated', { productId: m.productId });
+    emitToStore(storeId, 'inventory-movement:created', m);
+  }
+
+  res.status(201).json({ movements });
+});
+
 export const listMovements = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
   const storeId = req.user!.storeId;
   const { startDate, endDate, productId, tipo, reasonId, status } = req.query as {

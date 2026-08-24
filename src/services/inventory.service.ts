@@ -1,19 +1,68 @@
 import { prisma } from '../config/prisma';
 import { Prisma } from '@prisma/client';
 
-export async function getInventoryByStore(storeId: string) {
-  const inventories = await prisma.inventory.findMany({
-    where: { storeId },
-    include: {
-      product: {
-        include: { category: true },
-      },
-    },
-    orderBy: { product: { name: 'asc' } },
+export interface InventoryFilters {
+  search?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: 'name' | 'category' | 'quantity' | 'lowStockThreshold';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export async function getInventoryByStore(storeId: string, filters: InventoryFilters = {}) {
+  const where: Prisma.InventoryWhereInput = { storeId };
+
+  if (filters.search) {
+    where.product = {
+      name: { contains: filters.search, mode: 'insensitive' },
+    };
+  }
+
+  const orderBy: Prisma.InventoryOrderByWithRelationInput[] =
+    !filters.sortBy
+      ? [{ product: { name: 'asc' } }]
+      : filters.sortBy === 'name'
+        ? [{ product: { name: filters.sortOrder ?? 'asc' } }]
+        : filters.sortBy === 'category'
+          ? [{ product: { category: { name: filters.sortOrder ?? 'asc' } } }, { product: { name: 'asc' } }]
+          : filters.sortBy === 'lowStockThreshold'
+            ? [{ lowStockThreshold: filters.sortOrder ?? 'asc' }]
+            : [{ quantity: filters.sortOrder ?? 'asc' }];
+
+  const mapRow = (inv: Prisma.InventoryGetPayload<{ include: { product: { include: { category: true } } } }>) => ({
+    ...inv,
+    quantity: Number(inv.quantity),
   });
 
-  // Decimal → número al borde del servicio para que el frontend lo consuma.
-  return inventories.map((inv) => ({ ...inv, quantity: Number(inv.quantity) }));
+  // Sin `page` se devuelve el listado completo (compatibilidad).
+  if (!filters.page) {
+    const inventories = await prisma.inventory.findMany({
+      where,
+      include: { product: { include: { category: true } } },
+      orderBy,
+    });
+    return { inventory: inventories.map(mapRow) };
+  }
+
+  const limit = filters.limit ?? 50;
+  const [inventories, total] = await prisma.$transaction([
+    prisma.inventory.findMany({
+      where,
+      include: { product: { include: { category: true } } },
+      orderBy,
+      skip: (filters.page - 1) * limit,
+      take: limit,
+    }),
+    prisma.inventory.count({ where }),
+  ]);
+
+  return {
+    inventory: inventories.map(mapRow),
+    total,
+    page: filters.page,
+    limit,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  };
 }
 
 export async function getLowStock(storeId: string) {

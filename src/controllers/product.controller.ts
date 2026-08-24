@@ -60,8 +60,21 @@ export const deleteProduct = asyncAuthHandler(async (req: AuthedRequest, res: Re
 });
 
 export const getInventory = asyncHandler(async (req, res: Response) => {
-  const inventory = await inventoryService.getInventoryByStore(req.params.storeId);
-  res.json({ inventory });
+  const { search, page, limit, sortBy, sortOrder } = req.query as {
+    search?: string;
+    page?: string;
+    limit?: string;
+    sortBy?: 'name' | 'category' | 'quantity' | 'lowStockThreshold';
+    sortOrder?: 'asc' | 'desc';
+  };
+  const result = await inventoryService.getInventoryByStore(req.params.storeId, {
+    search,
+    page: page ? Math.max(1, parseInt(page, 10) || 1) : undefined,
+    limit: limit ? Math.min(200, Math.max(1, parseInt(limit, 10) || 50)) : undefined,
+    sortBy,
+    sortOrder,
+  });
+  res.json(result);
 });
 
 export const getLowStock = asyncHandler(async (req, res: Response) => {

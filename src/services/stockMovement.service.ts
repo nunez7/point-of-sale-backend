@@ -80,6 +80,8 @@ interface StockMovementRecord {
   balanceBefore: Prisma.Decimal;
   balanceAfter: Prisma.Decimal;
   unitCost: Prisma.Decimal;
+  batchId: string | null;
+  lossValue: Prisma.Decimal | null;
   comment: string | null;
   status: string;
   cancelledAt: Date | null;
@@ -106,6 +108,8 @@ function serializeMovement(m: StockMovementRecord) {
     balanceBefore: Number(m.balanceBefore),
     balanceAfter: Number(m.balanceAfter),
     unitCost: Number(m.unitCost),
+    lossValue: m.lossValue != null ? Number(m.lossValue) : null,
+    batchId: m.batchId ?? null,
     comment: m.comment,
     status: m.status,
     cancelledAt: m.cancelledAt?.toISOString() ?? null,
@@ -185,6 +189,120 @@ export async function createMovement(input: CreateMovementInput) {
     });
 
     return serializeMovement(movement);
+  });
+}
+
+export interface BatchMovementItem {
+  productId: string;
+  quantity: Prisma.Decimal | number;
+  comment?: string | null;
+}
+
+export interface CreateMovementBatchInput {
+  storeId: string;
+  userId: string;
+  reasonId: string;
+  comment?: string | null;
+  items: BatchMovementItem[];
+}
+
+// Crea un movimiento por cada producto del lote dentro de una sola
+// transacción, compartiendo el mismo `batchId`. Para SALIDAS se registra
+// la pérdida valorizada (cantidad * costo) en `lossValue`.
+export async function createMovementBatch(input: CreateMovementBatchInput) {
+  if (!input.items.length) {
+    throw ApiError.badRequest(
+      'El lote debe incluir al menos un producto',
+      'EMPTY_BATCH'
+    );
+  }
+
+  const batchId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  return prisma.$transaction(async (tx) => {
+    const reason = await tx.movementReason.findFirst({
+      where: { id: input.reasonId, storeId: input.storeId, isActive: true },
+    });
+    if (!reason) {
+      throw ApiError.badRequest(
+        'Motivo de movimiento no válido o inactivo',
+        'REASON_NOT_FOUND'
+      );
+    }
+
+    const movements: StockMovementRecord[] = [];
+    for (const item of input.items) {
+      const quantity = new Prisma.Decimal(item.quantity);
+
+      const product = await tx.product.findFirst({
+        where: { id: item.productId, storeId: input.storeId },
+        select: { id: true, name: true, unidadVenta: true, costPrice: true },
+      });
+      if (!product) {
+        throw ApiError.notFound(
+          `Producto no encontrado: ${item.productId}`,
+          'PRODUCT_NOT_FOUND'
+        );
+      }
+
+      const { before, after } = await applyInventoryDelta(
+        tx,
+        input.storeId,
+        item.productId,
+        reason.tipo,
+        quantity
+      );
+
+      const lossValue =
+        reason.tipo === MovementTipo.SALIDA
+          ? new Prisma.Decimal(product.costPrice.toString()).times(quantity)
+          : null;
+
+      const movement = await tx.stockMovement.create({
+        data: {
+          storeId: input.storeId,
+          productId: item.productId,
+          userId: input.userId,
+          reasonId: input.reasonId,
+          tipo: reason.tipo,
+          quantity,
+          balanceBefore: before,
+          balanceAfter: after,
+          unitCost: product.costPrice,
+          batchId,
+          lossValue,
+          comment: item.comment ?? input.comment ?? null,
+          status: 'ACTIVE',
+        },
+        include: {
+          product: { select: { name: true, unidadVenta: true } },
+          reason: { select: { id: true, name: true, tipo: true } },
+          user: { select: { id: true, name: true } },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          storeId: input.storeId,
+          userId: input.userId,
+          action: 'STOCK_MOVEMENT',
+          entity: 'StockMovement',
+          entityId: movement.id,
+          metadata: {
+            batchId,
+            tipo: reason.tipo,
+            productId: item.productId,
+            quantity: Number(quantity),
+            reason: reason.name,
+            comment: item.comment ?? input.comment ?? null,
+          },
+        },
+      });
+
+      movements.push(movement);
+    }
+
+    return movements.map(serializeMovement);
   });
 }
 
@@ -405,8 +523,10 @@ export async function getInventoryReport(storeId: string, date?: string) {
   let totalLossValue = new Prisma.Decimal(0);
   for (const m of movements) {
     if (m.tipo !== MovementTipo.SALIDA) continue;
-    const cost = new Prisma.Decimal(m.product.costPrice.toString());
-    const value = cost.times(m.quantity);
+    const value =
+      m.lossValue != null
+        ? new Prisma.Decimal(m.lossValue.toString())
+        : new Prisma.Decimal(m.product.costPrice.toString()).times(m.quantity);
     totalLossQty = totalLossQty.plus(m.quantity);
     totalLossValue = totalLossValue.plus(value);
     const entry =

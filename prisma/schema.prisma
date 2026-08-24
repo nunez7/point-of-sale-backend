@@ -203,6 +203,10 @@ model StockMovement {
   balanceBefore       Decimal        @db.Decimal(12, 3)
   balanceAfter        Decimal        @db.Decimal(12, 3)
   unitCost            Decimal        @db.Decimal(12, 2)  // costo del producto al momento del movimiento
+  // Agrupa movimientos creados en un solo registro (lote multi-producto).
+  batchId             String?
+  // Pérdida valorizada (cantidad * unitCost) solo para SALIDAS; null en ENTRADAS.
+  lossValue           Decimal?       @db.Decimal(12, 2)
   comment             String?
   status              String         @default("ACTIVE")   // ACTIVE | CANCELLED
   cancelledAt         DateTime?
@@ -214,6 +218,7 @@ model StockMovement {
   @@index([storeId, createdAt])
   @@index([productId])
   @@index([reasonId])
+  @@index([batchId])
 }
 
 // Snapshot de apertura del día: captura el stock al iniciar operaciones.
