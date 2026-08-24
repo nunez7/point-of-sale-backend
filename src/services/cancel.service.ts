@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma';
 import { Prisma } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
-import { parseLocalDate } from '../utils/dates';
+import { colombiaStartOfDay, colombiaEndOfDay } from '../utils/dates';
 import { createSupplierCancelMovementsInTx } from './stockMovement.service';
 
 const MAX_CANCELLATION_HOURS = 24;
@@ -558,16 +558,8 @@ export async function listCancellations(storeId: string, filters?: {
 
   if (filters?.startDate || filters?.endDate) {
     const createdAt: Record<string, Date> = {};
-    if (filters.startDate) {
-      const d = parseLocalDate(filters.startDate);
-      d.setHours(0, 0, 0, 0);
-      createdAt.gte = d;
-    }
-    if (filters.endDate) {
-      const d = parseLocalDate(filters.endDate);
-      d.setHours(23, 59, 59, 999);
-      createdAt.lte = d;
-    }
+    if (filters.startDate) createdAt.gte = colombiaStartOfDay(filters.startDate);
+    if (filters.endDate) createdAt.lte = colombiaEndOfDay(filters.endDate);
     if (Object.keys(createdAt).length) where.createdAt = createdAt;
   }
 

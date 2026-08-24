@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma';
 import { MovementTipo, Prisma } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
-import { parseLocalDate } from '../utils/dates';
+import { colombiaStartOfDay, colombiaEndOfDay } from '../utils/dates';
 
 export interface CreateMovementInput {
   storeId: string;
@@ -15,15 +15,11 @@ export interface CreateMovementInput {
 }
 
 function startOfDay(dateStr?: string): Date {
-  const base = dateStr ? parseLocalDate(dateStr) : new Date();
-  base.setHours(0, 0, 0, 0);
-  return base;
+  return colombiaStartOfDay(dateStr);
 }
 
 function endOfDay(dateStr?: string): Date {
-  const base = dateStr ? parseLocalDate(dateStr) : new Date();
-  base.setHours(23, 59, 59, 999);
-  return base;
+  return colombiaEndOfDay(dateStr);
 }
 
 // Aplica el delta de stock al inventario de forma atómica y devuelve
