@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma';
-import { Prisma, CancellationReason } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
 import { parseLocalDate } from '../utils/dates';
 
@@ -251,7 +251,7 @@ export async function cancelarFactura(
   id: string,
   storeId: string,
   userId: string,
-  reason?: CancellationReason,
+  cancellationReasonId?: string,
   comment?: string | null
 ) {
   return prisma.$transaction(async (tx) => {
@@ -268,13 +268,13 @@ export async function cancelarFactura(
         status: 'CANCELADA',
         canceledAt: new Date(),
         canceledBy: userId,
-        ...(reason && { cancellationReason: reason }),
+        ...(cancellationReasonId && { cancellationReasonId }),
         ...(comment !== undefined && { cancellationComment: comment }),
       },
     });
 
     // Create Cancellation record if reason provided
-    if (reason) {
+    if (cancellationReasonId) {
       await tx.cancellation.create({
         data: {
           storeId,
@@ -283,7 +283,8 @@ export async function cancelarFactura(
           entityId: id,
           entityNumber: factura.folio,
           total: factura.total,
-          reason,
+          type: 'FULL',
+          cancellationReasonId,
           comment: comment ?? null,
         },
       });
@@ -298,7 +299,7 @@ export async function cancelarFactura(
         entityId: id,
         metadata: {
           folio: factura.folio,
-          ...(reason && { reason }),
+          ...(cancellationReasonId && { cancellationReasonId }),
           ...(comment && { comment }),
         },
       },

@@ -15,6 +15,7 @@ import storeRoutes from './routes/store.routes';
 import clienteRoutes from './routes/cliente.routes';
 import facturaRoutes from './routes/factura.routes';
 import cancelRoutes from './routes/cancel.routes';
+import cancellationReasonRoutes from './routes/cancellationReason.routes';
 import inventoryRoutes from './routes/inventory.routes';
 
 export const app = express();
@@ -51,6 +52,7 @@ app.use('/api/stores', storeRoutes);
 app.use('/api/clientes', clienteRoutes);
 app.use('/api/facturas', facturaRoutes);
 app.use('/api/cancellations', cancelRoutes);
+app.use('/api/cancellation-reasons', cancellationReasonRoutes);
 app.use('/api/inventory', inventoryRoutes);
 
 app.use(notFound);

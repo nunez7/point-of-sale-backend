@@ -145,6 +145,24 @@ export async function corteCaja(storeId: string, date?: string, operatorId?: str
     orderBy: { canceledAt: 'desc' },
   });
 
+  // Cancelaciones del día (registros de Cancelación: totales y parciales).
+  const cancellationRecords = await prisma.cancellation.findMany({
+    where: {
+      storeId,
+      createdAt: { gte: desde, lte: hasta },
+      ...(operatorId ? { userId: operatorId } : {}),
+    },
+    include: {
+      user: { select: { name: true } },
+      cancellationReason: true,
+      items: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const cancelledAmount = cancellationRecords.reduce((s, c) => s + Number(c.total), 0);
+  const partialCancelledCount = cancellationRecords.filter((c) => c.type === 'PARTIAL').length;
+
   // Group by hour
   const byHour = new Map<number, { count: number; totalRevenue: number }>();
   for (const sale of sales) {
@@ -218,6 +236,27 @@ export async function corteCaja(storeId: string, date?: string, operatorId?: str
         quantity: Number(it.quantity),
         unitPrice: Number(it.unitPrice),
         unidad: it.product.unidadVenta,
+      })),
+    })),
+    cancelledAmount: Number(cancelledAmount),
+    partialCancelledCount,
+    cancellations: cancellationRecords.map((c) => ({
+      id: c.id,
+      entityType: c.entityType,
+      entityId: c.entityId,
+      entityNumber: c.entityNumber,
+      type: c.type,
+      total: Number(c.total),
+      reason: c.cancellationReason?.name ?? '—',
+      comment: c.comment,
+      createdAt: c.createdAt.toISOString(),
+      userName: c.user?.name ?? '—',
+      items: c.items.map((it) => ({
+        productName: it.productName,
+        quantity: Number(it.quantity),
+        unitPrice: Number(it.unitPrice),
+        unidad: it.unidad,
+        subtotal: Number(it.subtotal),
       })),
     })),
     inventario: await getInventoryReport(storeId, date),

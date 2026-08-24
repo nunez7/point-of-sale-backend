@@ -20,15 +20,16 @@ export const lookupEntity = asyncAuthHandler(async (req: AuthedRequest, res: Res
 });
 
 export const confirmCancellation = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
-  const { entityType, entityId, reason, comment } = req.body;
+  const { entityType, entityId, cancellationReasonId, comment, items } = req.body;
 
   const cancellation = await cancelService.confirmCancellation(
     entityType,
     entityId,
     req.user!.storeId,
     req.user!.id,
-    reason,
-    comment
+    cancellationReasonId,
+    comment,
+    items
   );
 
   emitToStore(req.user!.storeId, 'inventory:updated', {
@@ -40,18 +41,20 @@ export const confirmCancellation = asyncAuthHandler(async (req: AuthedRequest, r
 });
 
 export const listCancellations = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
-  const { startDate, endDate, entityType, reason } = req.query as {
+  const { startDate, endDate, entityType, cancellationReasonId, type } = req.query as {
     startDate?: string;
     endDate?: string;
     entityType?: string;
-    reason?: string;
+    cancellationReasonId?: string;
+    type?: 'FULL' | 'PARTIAL';
   };
 
   const cancellations = await cancelService.listCancellations(req.user!.storeId, {
     startDate,
     endDate,
     entityType,
-    reason,
+    cancellationReasonId,
+    type,
   });
 
   res.json({ cancellations });

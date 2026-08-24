@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma';
-import { Prisma, PaymentMethod, CancellationReason } from '@prisma/client';
+import { Prisma, PaymentMethod } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
 import { SupplierTxItemInput } from '../types';
 
@@ -209,7 +209,7 @@ export async function cancelSupplierTransaction(
   id: string,
   storeId: string,
   userId: string,
-  reason?: CancellationReason,
+  cancellationReasonId?: string,
   comment?: string | null
 ) {
   return prisma.$transaction(async (tx) => {
@@ -250,13 +250,13 @@ export async function cancelSupplierTransaction(
         status: 'CANCELED',
         canceledAt: new Date(),
         canceledBy: userId,
-        ...(reason && { cancellationReason: reason }),
+        ...(cancellationReasonId && { cancellationReasonId }),
         ...(comment !== undefined && { cancellationComment: comment }),
       },
     });
 
     // Create Cancellation record if reason provided
-    if (reason) {
+    if (cancellationReasonId) {
       await tx.cancellation.create({
         data: {
           storeId,
@@ -265,7 +265,8 @@ export async function cancelSupplierTransaction(
           entityId: id,
           entityNumber: id,
           total: txRecord.total,
-          reason,
+          type: 'FULL',
+          cancellationReasonId,
           comment: comment ?? null,
         },
       });
@@ -280,7 +281,7 @@ export async function cancelSupplierTransaction(
         entityId: id,
         metadata: {
           total: txRecord.total.toString(),
-          ...(reason && { reason }),
+          ...(cancellationReasonId && { cancellationReasonId }),
           ...(comment && { comment }),
         },
       },

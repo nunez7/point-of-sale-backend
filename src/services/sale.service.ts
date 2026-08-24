@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma';
-import { Prisma, PaymentMethod, CancellationReason } from '@prisma/client';
+import { Prisma, PaymentMethod } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
 import { SaleItemInput } from '../types';
 import { parseLocalDate } from '../utils/dates';
@@ -304,17 +304,25 @@ export async function cancelSale(
   id: string,
   storeId: string,
   userId: string,
-  reason?: CancellationReason,
+  cancellationReasonId?: string,
   comment?: string | null
 ) {
   return prisma.$transaction(async (tx) => {
     const sale = await tx.sale.findFirst({
       where: { id, storeId, status: 'COMPLETED' },
-      include: { items: true },
+      include: { items: true, factura: { select: { id: true, status: true } } },
     });
 
     if (!sale) {
       throw ApiError.notFound('Venta no encontrada o ya cancelada', 'SALE_NOT_FOUND');
+    }
+
+    // No se puede cancelar una venta con factura emitida; primero la factura.
+    if (sale.factura && sale.factura.status !== 'CANCELED') {
+      throw ApiError.badRequest(
+        'No se puede cancelar la venta: tiene una factura emitida. Cancele primero la factura.',
+        'SALE_HAS_ACTIVE_INVOICE'
+      );
     }
 
     // Restore inventory atomically
@@ -336,13 +344,13 @@ export async function cancelSale(
         status: 'CANCELED',
         canceledAt: new Date(),
         canceledBy: userId,
-        ...(reason && { cancellationReason: reason }),
+        ...(cancellationReasonId && { cancellationReasonId }),
         ...(comment !== undefined && { cancellationComment: comment }),
       },
     });
 
     // Create Cancellation record if reason provided
-    if (reason) {
+    if (cancellationReasonId) {
       await tx.cancellation.create({
         data: {
           storeId,
@@ -351,7 +359,8 @@ export async function cancelSale(
           entityId: id,
           entityNumber: sale.saleNumber,
           total: sale.total,
-          reason,
+          type: 'FULL',
+          cancellationReasonId,
           comment: comment ?? null,
         },
       });
@@ -366,7 +375,7 @@ export async function cancelSale(
         entityId: id,
         metadata: {
           saleNumber: sale.saleNumber,
-          ...(reason && { reason }),
+          ...(cancellationReasonId && { cancellationReasonId }),
           ...(comment && { comment }),
         },
       },

@@ -80,6 +80,28 @@ async function main() {
     });
   }
 
+  // ─── Motivos de cancelación (editables luego desde el módulo de cancelaciones) ──
+  const motivosCancelacionBase = [
+    'Error de facturación',
+    'Cliente/proveedor solicita anular',
+    'Duplicada',
+    'Devolución de mercancía',
+    'Cancelación de pedido',
+    'Otro',
+  ];
+
+  for (const nombre of motivosCancelacionBase) {
+    await prisma.cancellationReason.upsert({
+      where: { storeId_name: { storeId: store.id, name: nombre } },
+      update: {},
+      create: {
+        storeId: store.id,
+        name: nombre,
+        isActive: true,
+      },
+    });
+  }
+
   // Helper: crear producto + inventario
   async function crearProducto(p: {
     sku: string;

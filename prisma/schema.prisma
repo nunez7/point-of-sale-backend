@@ -36,13 +36,24 @@ enum UnidadVenta {
   VOLUMEN
 }
 
-enum CancellationReason {
-  ERROR_FACTURACION
-  CLIENTE_PROVEEDOR_SOLICITA
-  DUPLICADA
-  DEVOLUCION_MERCANCIA
-  CANCELACION_PEDIDO
-  OTRO
+// Motivo editable de cancelación (venta, factura, compra a proveedor).
+// La lista es por tienda y se administra desde el módulo de cancelaciones.
+model CancellationReason {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cancellations      Cancellation[]
+  sales              Sale[]
+  facturas           Factura[]
+  supplierTxs        SupplierTransaction[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
 }
 
 // Tipo de movimiento de inventario manual:
@@ -79,6 +90,7 @@ model Store {
   clientes       Cliente[]
   facturas       Factura[]
   cancellations  Cancellation[]
+  cancellationReasons CancellationReason[]
   movementReasons MovementReason[]
   stockMovements  StockMovement[]
   inventorySnapshots InventorySnapshot[]
@@ -254,7 +266,8 @@ model Sale {
   status      String        @default("COMPLETED")
   canceledAt  DateTime?
   canceledBy  String?
-  cancellationReason  CancellationReason?
+  cancellationReasonId  String?
+  cancellationReason    CancellationReason? @relation(fields: [cancellationReasonId], references: [id])
   cancellationComment String?
   createdAt   DateTime      @default(now())
 
@@ -277,6 +290,11 @@ model SaleItem {
   unitPrice   Decimal  @db.Decimal(12, 2)
   costPrice   Decimal  @db.Decimal(12, 2)
   profit      Decimal  @db.Decimal(12, 2)
+
+  canceledAt       DateTime?
+  canceledBy       String?
+  cancellationId   String?
+  cancellation     Cancellation? @relation(fields: [cancellationId], references: [id])
 }
 
 model Supplier {
@@ -309,7 +327,8 @@ model SupplierTransaction {
   status        String                       @default("COMPLETED")
   canceledAt    DateTime?
   canceledBy    String?
-  cancellationReason  CancellationReason?
+  cancellationReasonId  String?
+  cancellationReason    CancellationReason? @relation(fields: [cancellationReasonId], references: [id])
   cancellationComment String?
   createdAt     DateTime                     @default(now())
 
@@ -394,7 +413,8 @@ model Factura {
   status   String  @default("EMITIDA")
   canceledAt DateTime?
   canceledBy String?
-  cancellationReason  CancellationReason?
+  cancellationReasonId  String?
+  cancellationReason    CancellationReason? @relation(fields: [cancellationReasonId], references: [id])
   cancellationComment String?
   createdAt DateTime @default(now())
 
@@ -413,12 +433,42 @@ model Cancellation {
   entityId      String
   entityNumber  String
   total         Decimal  @db.Decimal(12, 2)
+  type          String   @default("FULL") // FULL | PARTIAL
 
-  reason        CancellationReason
+  cancellationReasonId  String?
+  cancellationReason    CancellationReason? @relation(fields: [cancellationReasonId], references: [id])
+
+  saleItems     SaleItem[]
+  items         CancellationItem[]
+
   comment       String?
 
   createdAt     DateTime @default(now())
 
   @@index([storeId, createdAt])
   @@index([entityType, entityId])
+  @@index([cancellationReasonId])
+}
+
+// Artículos cancelados dentro de una cancelación (usado en cancelaciones parciales).
+model CancellationItem {
+  id              String   @id @default(cuid())
+  cancellationId  String
+  cancellation    Cancellation @relation(fields: [cancellationId], references: [id], onDelete: Cascade)
+  storeId         String
+  saleItemId      String
+  productId       String
+  productName     String
+  quantity        Decimal  @db.Decimal(12, 3)
+  unidad          String?
+  unitPrice       Decimal  @db.Decimal(12, 2)
+  costPrice       Decimal  @db.Decimal(12, 2)
+  profit          Decimal  @db.Decimal(12, 2)
+  subtotal        Decimal  @db.Decimal(12, 2)
+  createdAt       DateTime @default(now())
+
+  @@index([cancellationId])
+  @@index([storeId])
+  @@index([productId])
+  @@index([saleItemId])
 }

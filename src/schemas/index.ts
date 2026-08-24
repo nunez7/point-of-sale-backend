@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaymentMethod, Role, UnidadVenta, CancellationReason, MovementTipo } from '@prisma/client';
+import { PaymentMethod, Role, UnidadVenta, MovementTipo } from '@prisma/client';
 
 export const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -288,11 +288,6 @@ export const facturaQuerySchema = z.object({
 
 // ---------- Cancelaciones ----------
 
-export const CANCELLATION_REASONS = Object.values(CancellationReason) as [
-  CancellationReason,
-  ...CancellationReason[],
-];
-
 export const cancelEntitySchema = z.object({
   entityType: z.enum(['SALE', 'FACTURA', 'SUPPLIER_TRANSACTION'], {
     errorMap: () => ({ message: 'Tipo de entidad inválido. Use: SALE, FACTURA o SUPPLIER_TRANSACTION' }),
@@ -305,26 +300,23 @@ export const cancelConfirmSchema = z.object({
     errorMap: () => ({ message: 'Tipo de entidad inválido. Use: SALE, FACTURA o SUPPLIER_TRANSACTION' }),
   }),
   entityId: z.string().min(1, 'El ID del documento es requerido'),
-  reason: z.nativeEnum(CancellationReason, {
-    errorMap: () => ({ message: 'Motivo de cancelación inválido' }),
-  }),
+  cancellationReasonId: z.string().min(1, 'El motivo de cancelación es requerido'),
   comment: z
     .string()
     .max(500, 'Máximo 500 caracteres')
     .optional()
     .nullable(),
-}).refine(
-  (data) => {
-    if (data.reason === 'OTRO' && (!data.comment || data.comment.trim().length === 0)) {
-      return false;
-    }
-    return true;
-  },
-  {
-    message: 'Al seleccionar "OTRO" como motivo, el comentario es obligatorio',
-    path: ['comment'],
-  }
-);
+  // Cancelación parcial (solo SALE): lista de artículos con la cantidad a cancelar.
+  items: z
+    .array(
+      z.object({
+        saleItemId: z.string().min(1, 'El artículo es requerido'),
+        quantity: z.number().positive('La cantidad debe ser mayor a 0'),
+      })
+    )
+    .min(1, 'Debe incluir al menos un artículo')
+    .optional(),
+});
 
 export const cancelationsQuerySchema = z.object({
   startDate: z
@@ -336,7 +328,8 @@ export const cancelationsQuerySchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
     .optional(),
   entityType: z.enum(['SALE', 'FACTURA', 'SUPPLIER_TRANSACTION']).optional(),
-  reason: z.nativeEnum(CancellationReason).optional(),
+  cancellationReasonId: z.string().optional(),
+  type: z.enum(['FULL', 'PARTIAL']).optional(),
 });
 
 // ---------- Motivos de movimiento de inventario ----------
@@ -351,6 +344,19 @@ export const movementReasonSchema = z.object({
 });
 
 export const movementReasonUpdateSchema = movementReasonSchema
+  .partial()
+  .refine((d) => Object.keys(d).length > 0, {
+    message: 'Debe enviar al menos un campo a actualizar',
+  });
+
+// ---------- Motivos de cancelación (editables) ----------
+
+export const cancellationReasonSchema = z.object({
+  name: z.string().min(1, 'El nombre es requerido').max(80, 'Máximo 80 caracteres'),
+  isActive: z.boolean().optional(),
+});
+
+export const cancellationReasonUpdateSchema = cancellationReasonSchema
   .partial()
   .refine((d) => Object.keys(d).length > 0, {
     message: 'Debe enviar al menos un campo a actualizar',
