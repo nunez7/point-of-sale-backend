@@ -1,25 +1,39 @@
 import { prisma } from '../config/prisma';
 import { Prisma } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
-import { parseLocalDate } from '../utils/dates';
 import { getInventoryReport } from './stockMovement.service';
 
+// Colombia es UTC-5 y no tiene horario de verano. Anclar los límites del día
+// a esta zona evita que las ventas de la tarde/noche queden en el día
+// siguiente del corte cuando el servidor corre en otra zona horaria.
+const COLOMBIA_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+function colombiaDateParts(dateStr?: string): { y: number; mo: number; d: number } {
+  if (dateStr) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+    if (!m) throw ApiError.badRequest('Fecha inválida', 'INVALID_DATE');
+    return { y: Number(m[1]), mo: Number(m[2]) - 1, d: Number(m[3]) };
+  }
+  // Fecha actual en Colombia, independiente de la zona del servidor.
+  const col = new Date(Date.now() + COLOMBIA_OFFSET_MS);
+  return { y: col.getUTCFullYear(), mo: col.getUTCMonth(), d: col.getUTCDate() };
+}
+
 function startOfDay(dateStr?: string): Date {
-  const base = dateStr ? parseLocalDate(dateStr) : new Date();
-  base.setHours(0, 0, 0, 0);
-  return base;
+  const { y, mo, d } = colombiaDateParts(dateStr);
+  // Mediana noche de Colombia expresada como instante UTC.
+  return new Date(Date.UTC(y, mo, d) + COLOMBIA_OFFSET_MS);
 }
 
 function endOfDay(dateStr?: string): Date {
-  const base = dateStr ? parseLocalDate(dateStr) : new Date();
-  base.setHours(23, 59, 59, 999);
-  return base;
+  return new Date(startOfDay(dateStr).getTime() + 24 * 60 * 60 * 1000 - 1);
 }
 
 function localDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const col = new Date(d.getTime() + COLOMBIA_OFFSET_MS);
+  const y = col.getUTCFullYear();
+  const m = String(col.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(col.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
 
@@ -65,11 +79,18 @@ export async function dailyReport(storeId: string, date?: string) {
   return result;
 }
 
-export async function corteCaja(storeId: string, date?: string, operatorId?: string) {
+export async function corteCaja(
+  storeId: string,
+  date?: string,
+  startDate?: string,
+  endDate?: string,
+  operatorId?: string
+) {
   await validateStore(storeId);
 
-  const desde = startOfDay(date);
-  const hasta = endOfDay(date);
+  const base = date ?? startDate ?? endDate;
+  const desde = startOfDay(startDate ?? base);
+  const hasta = endOfDay(endDate ?? base);
 
   const where: Prisma.SaleWhereInput = {
     storeId,
@@ -163,14 +184,25 @@ export async function corteCaja(storeId: string, date?: string, operatorId?: str
   const cancelledAmount = cancellationRecords.reduce((s, c) => s + Number(c.total), 0);
   const partialCancelledCount = cancellationRecords.filter((c) => c.type === 'PARTIAL').length;
 
-  // Group by hour
+  // Agrupación por hora (día único) o por día (rango).
+  const esDiaUnico = localDateKey(desde) === localDateKey(hasta);
+
   const byHour = new Map<number, { count: number; totalRevenue: number }>();
+  const byDay = new Map<string, { count: number; totalRevenue: number }>();
   for (const sale of sales) {
-    const hour = sale.createdAt.getHours();
-    const entry = byHour.get(hour) ?? { count: 0, totalRevenue: 0 };
-    entry.count += 1;
-    entry.totalRevenue += Number(sale.total);
-    byHour.set(hour, entry);
+    if (esDiaUnico) {
+      const hour = sale.createdAt.getHours();
+      const entry = byHour.get(hour) ?? { count: 0, totalRevenue: 0 };
+      entry.count += 1;
+      entry.totalRevenue += Number(sale.total);
+      byHour.set(hour, entry);
+    } else {
+      const dayKey = localDateKey(sale.createdAt);
+      const entry = byDay.get(dayKey) ?? { count: 0, totalRevenue: 0 };
+      entry.count += 1;
+      entry.totalRevenue += Number(sale.total);
+      byDay.set(dayKey, entry);
+    }
   }
 
   const salesByPayment: Record<string, { count: number; total: number }> = {};
@@ -218,7 +250,14 @@ export async function corteCaja(storeId: string, date?: string, operatorId?: str
       .map(([hour, v]) => ({
         hour,
         count: v.count,
-        totalRevenue: Number(v.totalRevenue),
+        totalRevenue: v.totalRevenue,
+      })),
+    byDay: Array.from(byDay.entries())
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([day, v]) => ({
+        date: day,
+        count: v.count,
+        totalRevenue: v.totalRevenue,
       })),
     sales: salesDetail,
     cancelledSales: cancelledSales.map((sale) => ({
@@ -259,7 +298,7 @@ export async function corteCaja(storeId: string, date?: string, operatorId?: str
         subtotal: Number(it.subtotal),
       })),
     })),
-    inventario: await getInventoryReport(storeId, date),
+    inventario: await getInventoryReport(storeId, startDate ?? date),
   };
 }
 

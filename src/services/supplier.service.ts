@@ -196,7 +196,11 @@ export async function listStoreTransactions(
   if (filters.startDate || filters.endDate) {
     const createdAt: Prisma.DateTimeFilter = {};
     if (filters.startDate) createdAt.gte = new Date(filters.startDate);
-    if (filters.endDate) createdAt.lte = new Date(filters.endDate);
+    if (filters.endDate) {
+      // Incluye todo el día de término en UTC (hasta las 23:59:59.999Z),
+      // sin depender de la zona horaria del servidor.
+      createdAt.lte = new Date(`${filters.endDate}T23:59:59.999Z`);
+    }
     where.createdAt = createdAt;
   }
 

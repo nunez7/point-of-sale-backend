@@ -285,12 +285,21 @@ export const saleLookupSchema = z.object({
   saleNumber: z.string().trim().toUpperCase(),
 });
 
-// El corte de caja toma la tienda del token; solo acepta la fecha del día.
+// El corte de caja toma la tienda del token; acepta un día (date) o un rango (startDate/endDate).
 export const corteCajaQuerySchema = z.object({
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha debe tener formato YYYY-MM-DD')
     .optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha inicial debe tener formato YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
+    .optional(),
+  operator: z.string().optional(),
 });
 
 export const facturaQuerySchema = z.object({

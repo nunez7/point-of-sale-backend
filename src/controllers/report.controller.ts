@@ -11,8 +11,19 @@ export const dailyReport = asyncHandler(async (req, res: Response) => {
 
 // El corte de caja se limita siempre a la tienda del usuario autenticado.
 export const corteCaja = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
-  const { date, operator } = req.query as { date?: string; operator?: string };
-  const result = await reportService.corteCaja(req.user!.storeId, date, operator ?? undefined);
+  const { date, startDate, endDate, operator } = req.query as {
+    date?: string;
+    startDate?: string;
+    endDate?: string;
+    operator?: string;
+  };
+  const result = await reportService.corteCaja(
+    req.user!.storeId,
+    date,
+    startDate,
+    endDate,
+    operator ?? undefined
+  );
   res.json(result);
 });
 
