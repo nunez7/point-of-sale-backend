@@ -95,9 +95,22 @@ export const saleQuerySchema = z.object({
 
 export const supplierSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
+  rfc: z
+    .string()
+    .trim()
+    .max(13)
+    .optional()
+    .nullable()
+    .refine(
+      (v) => !v || /^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{2}[0-9A]$/i.test(v),
+      'RFC inválido (formato: XXXX010101XXX)'
+    ),
   phone: z.string().optional().nullable(),
   email: z.string().email('Email inválido').optional().nullable(),
   address: z.string().optional().nullable(),
+  city: z.string().max(120).optional().nullable(),
+  state: z.string().max(120).optional().nullable(),
+  postalCode: z.string().max(10).optional().nullable(),
   storeId: z.string().min(1),
 });
 
@@ -107,6 +120,12 @@ export const supplierTxItemSchema = z.object({
   productId: z.string().min(1),
   quantity: cantidadPositiva,
   unitCost: positiveDecimal,
+  // Margen de ganancia (%) sobre el costo para sugerir el precio de venta.
+  // Por defecto 16 si no se envía.
+  marginPct: z.number().min(0).max(1000).optional(),
+  // Precio de venta resultante. Si se omite, se calcula como
+  // unitCost * (1 + marginPct/100).
+  sellingPrice: positiveDecimal.optional(),
 });
 
 export const supplierTxSchema = z.object({

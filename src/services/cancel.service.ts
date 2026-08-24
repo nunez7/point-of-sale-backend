@@ -2,6 +2,7 @@ import { prisma } from '../config/prisma';
 import { Prisma } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
 import { parseLocalDate } from '../utils/dates';
+import { createSupplierCancelMovementsInTx } from './stockMovement.service';
 
 const MAX_CANCELLATION_HOURS = 24;
 
@@ -450,25 +451,18 @@ export async function confirmCancellation(
           );
         }
 
-        // Restaurar inventario (restar lo que se había sumado)
-        for (const item of stx.items) {
-          const inventory = await tx.inventory.findUnique({
-            where: { storeId_productId: { storeId, productId: item.productId } },
-          });
-          if (inventory) {
-            const newQty = inventory.quantity.minus(item.quantity);
-            if (newQty.lessThan(0)) {
-              throw ApiError.badRequest(
-                'No se puede cancelar: el producto tendría stock negativo',
-                'INSUFFICIENT_STOCK_TO_CANCEL'
-              );
-            }
-            await tx.inventory.update({
-              where: { storeId_productId: { storeId, productId: item.productId } },
-              data: { quantity: { decrement: item.quantity } },
-            });
-          }
-        }
+        // Restaurar inventario (salida inversa) y registrar el movimiento de
+        // SALIDA vinculado a la compra (referenceType/referenceId = SUPPLIER_TX).
+        await createSupplierCancelMovementsInTx(tx, {
+          storeId,
+          userId,
+          referenceId: stx.id,
+          items: stx.items.map((i) => ({
+            productId: i.productId,
+            quantity: i.quantity,
+            unitCost: i.unitCost,
+          })),
+        });
 
         await tx.supplierTransaction.update({
           where: { id: entityId },

@@ -10,6 +10,8 @@ export interface CreateMovementInput {
   reasonId: string;
   quantity: Prisma.Decimal | number;
   comment?: string | null;
+  referenceType?: string | null;
+  referenceId?: string | null;
 }
 
 function startOfDay(dateStr?: string): Date {
@@ -162,6 +164,8 @@ export async function createMovement(input: CreateMovementInput) {
         balanceAfter: after,
         unitCost: product.costPrice,
         comment: input.comment ?? null,
+        referenceType: input.referenceType ?? null,
+        referenceId: input.referenceId ?? null,
         status: 'ACTIVE',
       },
       include: {
@@ -203,6 +207,8 @@ export interface CreateMovementBatchInput {
   userId: string;
   reasonId: string;
   comment?: string | null;
+  referenceType?: string | null;
+  referenceId?: string | null;
   items: BatchMovementItem[];
 }
 
@@ -272,6 +278,8 @@ export async function createMovementBatch(input: CreateMovementBatchInput) {
           batchId,
           lossValue,
           comment: item.comment ?? input.comment ?? null,
+          referenceType: input.referenceType ?? null,
+          referenceId: input.referenceId ?? null,
           status: 'ACTIVE',
         },
         include: {
@@ -454,6 +462,159 @@ export async function registerOpening(storeId: string, date?: string) {
   return { date: day.toISOString().slice(0, 10), count: inventories.length };
 }
 
+// Registra los movimientos de ENTRADA de una compra a proveedor dentro de
+// la transacción del llamador (no abre su propia transacción). Crea un
+// StockMovement ENTRADA por ítem, vinculado con referenceType/referenceId, y
+// aplica el delta de inventario de forma atómica.
+export async function createPurchaseMovementsInTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    storeId: string;
+    userId: string;
+    reasonId: string;
+    referenceId: string;
+    items: { productId: string; quantity: number; unitCost: Prisma.Decimal }[];
+  }
+) {
+  for (const item of input.items) {
+    const quantity = new Prisma.Decimal(item.quantity);
+
+    const product = await tx.product.findFirst({
+      where: { id: item.productId, storeId: input.storeId },
+      select: { id: true, name: true, unidadVenta: true, costPrice: true },
+    });
+    if (!product) {
+      throw ApiError.notFound('Producto no encontrado', 'PRODUCT_NOT_FOUND');
+    }
+
+    const { before, after } = await applyInventoryDelta(
+      tx,
+      input.storeId,
+      item.productId,
+      MovementTipo.ENTRADA,
+      quantity
+    );
+
+    const movement = await tx.stockMovement.create({
+      data: {
+        storeId: input.storeId,
+        productId: item.productId,
+        userId: input.userId,
+        reasonId: input.reasonId,
+        tipo: MovementTipo.ENTRADA,
+        quantity,
+        balanceBefore: before,
+        balanceAfter: after,
+        // Costo registrado en el movimiento es el costo de compra.
+        unitCost: new Prisma.Decimal(item.unitCost),
+        referenceType: 'SUPPLIER_TX',
+        referenceId: input.referenceId,
+        status: 'ACTIVE',
+      },
+      include: {
+        product: { select: { name: true, unidadVenta: true } },
+        reason: { select: { id: true, name: true, tipo: true } },
+        user: { select: { id: true, name: true } },
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        storeId: input.storeId,
+        userId: input.userId,
+        action: 'STOCK_MOVEMENT',
+        entity: 'StockMovement',
+        entityId: movement.id,
+        metadata: {
+          tipo: MovementTipo.ENTRADA,
+          productId: item.productId,
+          quantity: Number(quantity),
+          reason: 'Compra a proveedor',
+          referenceId: input.referenceId,
+        },
+      },
+    });
+  }
+}
+
+// Registra los movimientos de SALIDA inversos al cancelar una compra a
+// proveedor, dentro de la transacción del llamador. Crea un StockMovement
+// SALIDA por ítem, vinculado al mismo referenceType/referenceId de la compra,
+// y aplica el delta de inventario (resta) de forma atómica.
+export async function createSupplierCancelMovementsInTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    storeId: string;
+    userId: string;
+    referenceId: string;
+    items: { productId: string; quantity: Prisma.Decimal | number; unitCost: Prisma.Decimal | number }[];
+  }
+) {
+  const reason = await tx.movementReason.findFirst({
+    where: { storeId: input.storeId, name: 'Cancelación de compra', tipo: MovementTipo.SALIDA, isActive: true },
+  });
+  if (!reason) {
+    throw ApiError.badRequest(
+      'Motivo de cancelación de compra no encontrado',
+      'REASON_NOT_FOUND'
+    );
+  }
+
+  for (const item of input.items) {
+    const quantity = new Prisma.Decimal(item.quantity);
+
+    const product = await tx.product.findFirst({
+      where: { id: item.productId, storeId: input.storeId },
+      select: { id: true, name: true, unidadVenta: true, costPrice: true },
+    });
+    if (!product) {
+      throw ApiError.notFound('Producto no encontrado', 'PRODUCT_NOT_FOUND');
+    }
+
+    const { before, after } = await applyInventoryDelta(
+      tx,
+      input.storeId,
+      item.productId,
+      MovementTipo.SALIDA,
+      quantity
+    );
+
+    const movement = await tx.stockMovement.create({
+      data: {
+        storeId: input.storeId,
+        productId: item.productId,
+        userId: input.userId,
+        reasonId: reason.id,
+        tipo: MovementTipo.SALIDA,
+        quantity,
+        balanceBefore: before,
+        balanceAfter: after,
+        unitCost: new Prisma.Decimal(item.unitCost),
+        referenceType: 'SUPPLIER_TX',
+        referenceId: input.referenceId,
+        status: 'ACTIVE',
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        storeId: input.storeId,
+        userId: input.userId,
+        action: 'STOCK_MOVEMENT',
+        entity: 'StockMovement',
+        entityId: movement.id,
+        metadata: {
+          tipo: MovementTipo.SALIDA,
+          productId: item.productId,
+          quantity: Number(quantity),
+          reason: 'Cancelación de compra',
+          referenceId: input.referenceId,
+        },
+      },
+    });
+  }
+}
+
 export async function hasOpening(storeId: string, date?: string) {
   const day = startOfDay(date);
   const count = await prisma.inventorySnapshot.count({ where: { storeId, date: day } });
@@ -484,10 +645,6 @@ export async function getInventoryReport(storeId: string, date?: string) {
     where: { storeId, status: 'COMPLETED', createdAt: { gte: desde, lte: hasta } },
     include: { items: true },
   });
-  const purchases = await prisma.supplierTransaction.findMany({
-    where: { storeId, status: 'COMPLETED', createdAt: { gte: desde, lte: hasta } },
-    include: { items: true },
-  });
   const movements = await prisma.stockMovement.findMany({
     where: { storeId, status: 'ACTIVE', createdAt: { gte: desde, lte: hasta } },
     include: {
@@ -503,16 +660,21 @@ export async function getInventoryReport(storeId: string, date?: string) {
     for (const it of s.items)
       ventas.set(it.productId, (ventas.get(it.productId) ?? new Prisma.Decimal(0)).plus(it.quantity));
 
+  // Las compras a proveedor ahora se registran como StockMovement ENTRADA
+  // (referenceType = SUPPLIER_TX), por lo que no se cuentan aparte: se
+  // derivan del subconjunto de entradas para no duplicar el conteo.
   const compras = new Map<string, Prisma.Decimal>();
-  for (const p of purchases)
-    for (const it of p.items)
-      compras.set(it.productId, (compras.get(it.productId) ?? new Prisma.Decimal(0)).plus(it.quantity));
-
   const entradas = new Map<string, Prisma.Decimal>();
   const salidas = new Map<string, Prisma.Decimal>();
   for (const m of movements) {
-    const map = m.tipo === MovementTipo.ENTRADA ? entradas : salidas;
-    map.set(m.productId, (map.get(m.productId) ?? new Prisma.Decimal(0)).plus(m.quantity));
+    if (m.tipo === MovementTipo.ENTRADA) {
+      entradas.set(m.productId, (entradas.get(m.productId) ?? new Prisma.Decimal(0)).plus(m.quantity));
+      if (m.referenceType === 'SUPPLIER_TX') {
+        compras.set(m.productId, (compras.get(m.productId) ?? new Prisma.Decimal(0)).plus(m.quantity));
+      }
+    } else {
+      salidas.set(m.productId, (salidas.get(m.productId) ?? new Prisma.Decimal(0)).plus(m.quantity));
+    }
   }
 
   const lossByReason = new Map<
@@ -549,7 +711,8 @@ export async function getInventoryReport(storeId: string, date?: string) {
     if (snap !== undefined) {
       initialQty = snap;
     } else {
-      initialQty = finalQty.plus(v).plus(s).minus(c).minus(e);
+      // 'c' (compras) ya está contenido en 'e' (entradas), no se resta de nuevo.
+      initialQty = finalQty.plus(v).plus(s).minus(e);
     }
 
     const cost = new Prisma.Decimal(inv.product.costPrice.toString());

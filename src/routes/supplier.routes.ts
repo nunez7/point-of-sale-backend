@@ -5,6 +5,8 @@ import {
   updateSupplier,
   getSupplierTransactions,
   createSupplierTransaction,
+  listStoreTransactions,
+  getTransactionById,
 } from '../controllers/supplier.controller';
 import {
   supplierSchema,
@@ -19,13 +21,23 @@ import { Role } from '@prisma/client';
 
 const router = Router();
 
-// Must be registered before /:id/transactions and /:id
+// Debe registrarse antes de /:id/transactions y /:id.
 router.post(
   '/transactions',
   requireAuth,
   requireRole(Role.GERENTE, Role.ADMIN),
   validate(supplierTxSchema),
   createSupplierTransaction
+);
+router.get(
+  '/transactions',
+  requireAuth,
+  listStoreTransactions
+);
+router.get(
+  '/transactions/:id',
+  requireAuth,
+  getTransactionById
 );
 
 router.get('/', requireAuth, listSuppliers);

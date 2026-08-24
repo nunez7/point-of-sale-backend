@@ -31,6 +31,8 @@ export interface SupplierTxItemInput {
   productId: string;
   quantity: number;
   unitCost: number;
+  marginPct?: number;
+  sellingPrice?: number;
 }
 
 export const ROLE_HIERARCHY: Record<Role, number> = {

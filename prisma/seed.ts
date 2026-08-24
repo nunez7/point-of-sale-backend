@@ -55,6 +55,7 @@ async function main() {
     { name: 'Devolución de cliente', tipo: 'ENTRADA' },
     { name: 'Producto reubicado o encontrado', tipo: 'ENTRADA' },
     { name: 'Compra no registrada', tipo: 'ENTRADA' },
+    { name: 'Compra a proveedor', tipo: 'ENTRADA' },
     // SALIDA (resta stock: merma, pérdida, etc.)
     { name: 'Merma / producto echado a perder', tipo: 'SALIDA', departamento: 'Abarrotes' },
     { name: 'Caducado / vencido', tipo: 'SALIDA' },
@@ -64,6 +65,7 @@ async function main() {
     { name: 'Degustación / muestra', tipo: 'SALIDA' },
     { name: 'Traslado a otra sucursal', tipo: 'SALIDA' },
     { name: 'Error de captura en venta', tipo: 'SALIDA' },
+    { name: 'Cancelación de compra', tipo: 'SALIDA' },
   ];
 
   for (const m of motivosBase) {

@@ -1,31 +1,67 @@
 import { prisma } from '../config/prisma';
-import { Prisma, PaymentMethod } from '@prisma/client';
+import { Prisma, MovementTipo, PaymentMethod } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
 import { SupplierTxItemInput } from '../types';
+import { createPurchaseMovementsInTx } from './stockMovement.service';
+
+const PURCHASE_REASON_NAME = 'Compra a proveedor';
+const DEFAULT_MARGIN_PCT = 16;
 
 export interface CreateSupplierInput {
   name: string;
+  rfc?: string | null;
   phone?: string | null;
   email?: string | null;
   address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
   storeId: string;
 }
 
-export async function listSuppliers(storeId?: string) {
+export async function listSuppliers(storeId?: string, search?: string) {
+  const where: Prisma.SupplierWhereInput = storeId ? { storeId } : {};
+  if (search && search.trim()) {
+    where.name = { contains: search.trim(), mode: 'insensitive' };
+  }
   return prisma.supplier.findMany({
-    where: storeId ? { storeId } : undefined,
+    where,
     orderBy: { name: 'asc' },
   });
 }
 
-export async function createSupplier(data: CreateSupplierInput, userId: string) {
+// Obtiene (o crea, si no existe) el motivo de movimiento "Compra a proveedor"
+// dentro de la transacción del llamador.
+async function getOrCreatePurchaseReason(
+  tx: Prisma.TransactionClient,
+  storeId: string
+) {
+  let reason = await tx.movementReason.findFirst({
+    where: { storeId, name: PURCHASE_REASON_NAME, isActive: true },
+  });
+  if (!reason) {
+    reason = await tx.movementReason.create({
+      data: { storeId, name: PURCHASE_REASON_NAME, tipo: MovementTipo.ENTRADA, isActive: true },
+    });
+  }
+  return reason;
+}
+
+export async function createSupplier(
+  data: CreateSupplierInput,
+  userId: string
+) {
   return prisma.$transaction(async (tx) => {
     const supplier = await tx.supplier.create({
       data: {
         name: data.name,
+        rfc: data.rfc ?? undefined,
         phone: data.phone ?? undefined,
         email: data.email ?? undefined,
         address: data.address ?? undefined,
+        city: data.city ?? undefined,
+        state: data.state ?? undefined,
+        postalCode: data.postalCode ?? undefined,
         storeId: data.storeId,
       },
     });
@@ -58,9 +94,13 @@ export async function updateSupplier(
       where: { id },
       data: {
         ...(data.name !== undefined && { name: data.name }),
+        ...(data.rfc !== undefined && { rfc: data.rfc ?? null }),
         ...(data.phone !== undefined && { phone: data.phone ?? null }),
         ...(data.email !== undefined && { email: data.email ?? null }),
         ...(data.address !== undefined && { address: data.address ?? null }),
+        ...(data.city !== undefined && { city: data.city ?? null }),
+        ...(data.state !== undefined && { state: data.state ?? null }),
+        ...(data.postalCode !== undefined && { postalCode: data.postalCode ?? null }),
       },
     });
 
@@ -83,8 +123,12 @@ export async function getSupplierTransactions(supplierId: string, storeId: strin
   const transactions = await prisma.supplierTransaction.findMany({
     where: { supplierId, storeId },
     include: {
-      items: { include: { product: true } },
+      items: {
+        include: { product: true },
+        orderBy: { id: 'asc' },
+      },
       user: { select: { id: true, name: true } },
+      supplier: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -94,10 +138,92 @@ export async function getSupplierTransactions(supplierId: string, storeId: strin
   return transactions.map((tx) => ({
     ...tx,
     total: Number(tx.total),
+    reference: tx.reference,
     items: tx.items.map((it) => ({
       ...it,
       quantity: Number(it.quantity),
       unitCost: Number(it.unitCost),
+      marginPct: Number(it.marginPct),
+      sellingPrice: it.sellingPrice != null ? Number(it.sellingPrice) : null,
+    })),
+  }));
+}
+
+// Detalle completo de una compra (para la "Nota de compra" imprimible).
+// Acepta un cliente de transacción opcional para poder invocarse dentro de
+// una transacción interactiva y ver los cambios aún no confirmados.
+export async function getSupplierTransactionById(
+  id: string,
+  storeId: string,
+  client: Prisma.TransactionClient | typeof prisma = prisma
+) {
+  const tx = await client.supplierTransaction.findFirst({
+    where: { id, storeId },
+    include: {
+      items: {
+        include: { product: { select: { id: true, name: true, sku: true, unidadVenta: true } } },
+        orderBy: { id: 'asc' },
+      },
+      user: { select: { id: true, name: true } },
+      supplier: { select: { id: true, name: true, phone: true, email: true, address: true } },
+      store: { select: { id: true, name: true, code: true, address: true } },
+    },
+  });
+  if (!tx) {
+    throw ApiError.notFound('Compra a proveedor no encontrada', 'SUPPLIER_TX_NOT_FOUND');
+  }
+
+  return {
+    ...tx,
+    total: Number(tx.total),
+    items: tx.items.map((it) => ({
+      ...it,
+      quantity: Number(it.quantity),
+      unitCost: Number(it.unitCost),
+      marginPct: Number(it.marginPct),
+      sellingPrice: it.sellingPrice != null ? Number(it.sellingPrice) : null,
+      subtotal: Number(new Prisma.Decimal(it.unitCost.toString()).mul(it.quantity)),
+    })),
+  };
+}
+
+// Lista de compras de toda la tienda (reporte recuperable).
+export async function listStoreTransactions(
+  storeId: string,
+  filters: { startDate?: string; endDate?: string } = {}
+) {
+  const where: Prisma.SupplierTransactionWhereInput = { storeId };
+  if (filters.startDate || filters.endDate) {
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (filters.startDate) createdAt.gte = new Date(filters.startDate);
+    if (filters.endDate) createdAt.lte = new Date(filters.endDate);
+    where.createdAt = createdAt;
+  }
+
+  const transactions = await prisma.supplierTransaction.findMany({
+    where,
+    include: {
+      supplier: { select: { id: true, name: true } },
+      user: { select: { id: true, name: true } },
+      items: {
+        include: { product: { select: { id: true, name: true, sku: true, unidadVenta: true } } },
+        orderBy: { id: 'asc' },
+      },
+      _count: { select: { items: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return transactions.map((tx) => ({
+    ...tx,
+    total: Number(tx.total),
+    items: tx.items.map((it) => ({
+      ...it,
+      quantity: Number(it.quantity),
+      unitCost: Number(it.unitCost),
+      marginPct: Number(it.marginPct),
+      sellingPrice: it.sellingPrice != null ? Number(it.sellingPrice) : null,
+      subtotal: Number(new Prisma.Decimal(it.unitCost.toString()).mul(it.quantity)),
     })),
   }));
 }
@@ -119,11 +245,18 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
       throw ApiError.notFound('Proveedor no encontrado en esta tienda', 'SUPPLIER_NOT_FOUND');
     }
 
+    const store = await tx.store.findUnique({ where: { id: input.storeId } });
+    if (!store) {
+      throw ApiError.notFound('Tienda no encontrada', 'STORE_NOT_FOUND');
+    }
+
     let total = new Prisma.Decimal(0);
     const preparedItems: Array<{
       productId: string;
       quantity: number;
       unitCost: Prisma.Decimal;
+      marginPct: Prisma.Decimal;
+      sellingPrice: Prisma.Decimal;
     }> = [];
 
     const productIds = input.items.map((i) => i.productId);
@@ -141,19 +274,40 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
         throw ApiError.badRequest('Costo unitario y cantidad deben ser positivos', 'INVALID_INPUT');
       }
 
+      const marginPct = new Prisma.Decimal(item.marginPct ?? DEFAULT_MARGIN_PCT);
+      // Precio sugerido = costo * (1 + margen/100). Si el usuario lo
+      // sobrescribe, prevalece su valor (mayor ganancia).
+      const suggested = new Prisma.Decimal(item.unitCost).mul(
+        new Prisma.Decimal(1).plus(marginPct.div(100))
+      );
+      const sellingPrice = item.sellingPrice != null
+        ? new Prisma.Decimal(item.sellingPrice)
+        : suggested;
+
       total = total.plus(new Prisma.Decimal(item.unitCost).mul(item.quantity));
       preparedItems.push({
         productId: product.id,
         quantity: item.quantity,
         unitCost: new Prisma.Decimal(item.unitCost),
+        marginPct,
+        sellingPrice,
       });
     }
+
+    // Folio secuencial de compra (ej. COMPRA-STORE001-0001).
+    const sequence = (store.purchaseSequence ?? 0) + 1;
+    const reference = `COMPRA-${store.code}-${String(sequence).padStart(4, '0')}`;
+    await tx.store.update({
+      where: { id: store.id },
+      data: { purchaseSequence: sequence },
+    });
 
     const transaction = await tx.supplierTransaction.create({
       data: {
         supplierId: input.supplierId,
         storeId: input.storeId,
         userId: input.userId,
+        reference,
         total,
         paymentMethod: input.paymentMethod as PaymentMethod,
         items: {
@@ -161,29 +315,35 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
             productId: it.productId,
             quantity: it.quantity,
             unitCost: it.unitCost,
+            marginPct: it.marginPct,
+            sellingPrice: it.sellingPrice,
           })),
         },
       },
       include: { items: true },
     });
 
-    // Update product cost + inventory atomically
+    // Actualiza el costo y el precio de venta sugerido/sobrescrito del producto.
     for (const it of preparedItems) {
       await tx.product.update({
         where: { id: it.productId },
-        data: { costPrice: it.unitCost },
-      });
-
-      await tx.inventory.upsert({
-        where: { storeId_productId: { storeId: input.storeId, productId: it.productId } },
-        create: {
-          storeId: input.storeId,
-          productId: it.productId,
-          quantity: it.quantity,
-        },
-        update: { quantity: { increment: it.quantity } },
+        data: { costPrice: it.unitCost, sellingPrice: it.sellingPrice },
       });
     }
+
+    // Registra el movimiento de entrada en StockMovement (tipo "Compra a proveedor").
+    const reason = await getOrCreatePurchaseReason(tx, input.storeId);
+    await createPurchaseMovementsInTx(tx, {
+      storeId: input.storeId,
+      userId: input.userId,
+      reasonId: reason.id,
+      referenceId: transaction.id,
+      items: preparedItems.map((it) => ({
+        productId: it.productId,
+        quantity: it.quantity,
+        unitCost: it.unitCost,
+      })),
+    });
 
     await tx.auditLog.create({
       data: {
@@ -194,6 +354,7 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
         entityId: transaction.id,
         metadata: {
           supplierId: input.supplierId,
+          reference,
           total: total.toString(),
           items: input.items.length,
           paymentMethod: input.paymentMethod,
@@ -201,7 +362,8 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
       },
     });
 
-    return transaction;
+    const full = await getSupplierTransactionById(transaction.id, input.storeId, tx);
+    return full;
   });
 }
 
@@ -224,24 +386,61 @@ export async function cancelSupplierTransaction(
       );
     }
 
-    // Restore inventory (subtract what was added)
+    const reason = await getOrCreatePurchaseReason(tx, storeId);
+
+    // Movimiento inverso (SALIDA) por cada ítem para mantener el inventario
+    // y el reporte coherentes y 100% trazables.
     for (const item of txRecord.items) {
+      const quantity = new Prisma.Decimal(item.quantity);
       const inventory = await tx.inventory.findUnique({
         where: { storeId_productId: { storeId, productId: item.productId } },
       });
-      if (inventory) {
-        const newQty = inventory.quantity.minus(item.quantity);
-        if (newQty.lessThan(0)) {
-          throw ApiError.badRequest(
-            'No se puede cancelar: el producto tendría stock negativo',
-            'INSUFFICIENT_STOCK_TO_CANCEL'
-          );
-        }
-        await tx.inventory.update({
-          where: { storeId_productId: { storeId, productId: item.productId } },
-          data: { quantity: { decrement: item.quantity } },
-        });
+      const before = inventory ? inventory.quantity : new Prisma.Decimal(0);
+      if (before.lessThan(quantity)) {
+        throw ApiError.badRequest(
+          'No se puede cancelar: el producto tendría stock negativo',
+          'INSUFFICIENT_STOCK_TO_CANCEL'
+        );
       }
+      const updated = await tx.inventory.update({
+        where: { storeId_productId: { storeId, productId: item.productId } },
+        data: { quantity: { decrement: quantity } },
+      });
+
+      const movement = await tx.stockMovement.create({
+        data: {
+          storeId,
+          productId: item.productId,
+          userId,
+          reasonId: reason.id,
+          tipo: MovementTipo.SALIDA,
+          quantity,
+          balanceBefore: before,
+          balanceAfter: updated.quantity,
+          unitCost: item.unitCost,
+          comment: `Anulación de compra ${txRecord.reference}`,
+          referenceType: 'SUPPLIER_TX',
+          referenceId: id,
+          status: 'ACTIVE',
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          storeId,
+          userId,
+          action: 'STOCK_MOVEMENT',
+          entity: 'StockMovement',
+          entityId: movement.id,
+          metadata: {
+            tipo: MovementTipo.SALIDA,
+            productId: item.productId,
+            quantity: Number(quantity),
+            reason: 'Compra a proveedor',
+            referenceId: id,
+          },
+        },
+      });
     }
 
     const canceled = await tx.supplierTransaction.update({
@@ -255,7 +454,6 @@ export async function cancelSupplierTransaction(
       },
     });
 
-    // Create Cancellation record if reason provided
     if (cancellationReasonId) {
       await tx.cancellation.create({
         data: {
@@ -263,7 +461,7 @@ export async function cancelSupplierTransaction(
           userId,
           entityType: 'SUPPLIER_TRANSACTION',
           entityId: id,
-          entityNumber: id,
+          entityNumber: txRecord.reference,
           total: txRecord.total,
           type: 'FULL',
           cancellationReasonId,
@@ -280,6 +478,7 @@ export async function cancelSupplierTransaction(
         entity: 'SUPPLIER_TRANSACTION',
         entityId: id,
         metadata: {
+          reference: txRecord.reference,
           total: txRecord.total.toString(),
           ...(cancellationReasonId && { cancellationReasonId }),
           ...(comment && { comment }),

@@ -2,12 +2,39 @@ import { Response } from 'express';
 import { asyncHandler, asyncAuthHandler } from '../utils/asyncHandler';
 import * as supplierService from '../services/supplier.service';
 import { emitToStore, emitToStoreExcept } from '../socket/socket';
+import { ApiError } from '../utils/ApiError';
 import { AuthedRequest } from '../types';
 
 export const listSuppliers = asyncHandler(async (req, res: Response) => {
-  const { storeId } = req.query as { storeId?: string };
-  const suppliers = await supplierService.listSuppliers(storeId);
+  const { storeId, search } = req.query as { storeId?: string; search?: string };
+  const suppliers = await supplierService.listSuppliers(storeId, search);
   res.json({ suppliers });
+});
+
+// Lista de compras de toda la tienda (reporte recuperable).
+export const listStoreTransactions = asyncHandler(async (req, res: Response) => {
+  const { storeId, startDate, endDate } = req.query as {
+    storeId?: string;
+    startDate?: string;
+    endDate?: string;
+  };
+  if (!storeId) {
+    throw ApiError.badRequest('storeId es requerido', 'MISSING_STORE_ID');
+  }
+  const transactions = await supplierService.listStoreTransactions(storeId, {
+    startDate,
+    endDate,
+  });
+  res.json({ transactions });
+});
+
+// Detalle completo de una compra (para la "Nota de compra").
+export const getTransactionById = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const transaction = await supplierService.getSupplierTransactionById(
+    req.params.id,
+    req.user!.storeId
+  );
+  res.json({ transaction });
 });
 
 export const createSupplier = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
