@@ -20,7 +20,7 @@ function mapearErrorCodigoDuplicado(error: unknown): unknown {
     (error as { code: string }).code === 'P2002'
   ) {
     return ApiError.conflict(
-      'Ya existe una tienda con esa razón social',
+      'Ya existe una tienda con ese código',
       'TIENDA_CODIGO_DUPLICADO'
     );
   }
