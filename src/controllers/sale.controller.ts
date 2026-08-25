@@ -4,6 +4,7 @@ import * as saleService from '../services/sale.service';
 import { emitToStore, emitToStoreExcept } from '../socket/socket';
 import { ApiError } from '../utils/ApiError';
 import { AuthedRequest } from '../types';
+import { checkStockAlert } from '../services/stockAlert.service';
 
 export const createSale = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
   const { items, paymentMethod, discount, storeId } = req.body;
@@ -24,6 +25,14 @@ export const createSale = asyncAuthHandler(async (req: AuthedRequest, res: Respo
   // el aviso de "otra estación".
   emitToStoreExcept(storeId, 'sale:created', result, req.headers['x-socket-id']);
   emitToStore(storeId, 'inventory:updated', { storeId, trigger: 'sale' });
+
+  // Alerta de inventario agotado/por agotarse por producto vendido.
+  for (const item of items) {
+    await checkStockAlert(storeId, item.productId, {
+      delta: item.quantity,
+      decrease: true,
+    });
+  }
 
   res.status(201).json(result);
 });

@@ -3,6 +3,7 @@ import { asyncAuthHandler } from '../utils/asyncHandler';
 import * as stockMovementService from '../services/stockMovement.service';
 import { AuthedRequest } from '../types';
 import { emitToStore } from '../socket/socket';
+import { checkStockAlert } from '../services/stockAlert.service';
 
 export const createMovement = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
   const storeId = req.user!.storeId;
@@ -17,6 +18,10 @@ export const createMovement = asyncAuthHandler(async (req: AuthedRequest, res: R
 
   emitToStore(storeId, 'inventory:updated', { productId: movement.productId });
   emitToStore(storeId, 'inventory-movement:created', movement);
+
+  if (movement.tipo === 'SALIDA') {
+    await checkStockAlert(storeId, movement.productId, { before: movement.balanceBefore });
+  }
 
   res.status(201).json({ movement });
 });
@@ -39,6 +44,9 @@ export const createMovementBatch = asyncAuthHandler(async (req: AuthedRequest, r
   for (const m of movements) {
     emitToStore(storeId, 'inventory:updated', { productId: m.productId });
     emitToStore(storeId, 'inventory-movement:created', m);
+    if (m.tipo === 'SALIDA') {
+      await checkStockAlert(storeId, m.productId, { before: m.balanceBefore });
+    }
   }
 
   res.status(201).json({ movements });
@@ -78,6 +86,11 @@ export const cancelMovement = asyncAuthHandler(async (req: AuthedRequest, res: R
 
   emitToStore(storeId, 'inventory:updated', { productId: inverse.productId });
   emitToStore(storeId, 'inventory-movement:created', inverse);
+
+  // La cancelación crea un movimiento inverso; si es SALIDA resta stock.
+  if (inverse.tipo === 'SALIDA') {
+    await checkStockAlert(storeId, inverse.productId, { before: inverse.balanceBefore });
+  }
 
   res.json({ movement: inverse });
 });

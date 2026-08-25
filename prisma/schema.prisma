@@ -78,6 +78,9 @@ model Store {
   saleSequence Int    @default(0)
   facturaSequence Int @default(0)
   purchaseSequence Int @default(0)
+  // Alertas de inventario configurables por el usuario.
+  notifyOutOfStock Boolean @default(true)
+  notifyLowStock   Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

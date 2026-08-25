@@ -10,6 +10,8 @@ export type UpdateStoreInput = {
   rfc?: string | null;
   regimenFiscal?: string | null;
   codigoPostal?: string | null;
+  notifyOutOfStock?: boolean;
+  notifyLowStock?: boolean;
 }
 
 function mapearErrorCodigoDuplicado(error: unknown): unknown {
@@ -58,8 +60,10 @@ export async function updateStore(
           ...(data.phone !== undefined && { phone: data.phone }),
           ...(data.rfc !== undefined && { rfc: data.rfc }),
           ...(data.regimenFiscal !== undefined && { regimenFiscal: data.regimenFiscal }),
-          ...(data.codigoPostal !== undefined && { codigoPostal: data.codigoPostal }),
-        },
+           ...(data.codigoPostal !== undefined && { codigoPostal: data.codigoPostal }),
+           ...(data.notifyOutOfStock !== undefined && { notifyOutOfStock: data.notifyOutOfStock }),
+           ...(data.notifyLowStock !== undefined && { notifyLowStock: data.notifyLowStock }),
+         },
       });
 
       await tx.auditLog.create({

@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { asyncHandler, asyncAuthHandler } from '../utils/asyncHandler';
 import * as productService from '../services/product.service';
 import * as inventoryService from '../services/inventory.service';
+import { getStockAlerts as fetchStockAlerts } from '../services/stockAlert.service';
 import { ApiError } from '../utils/ApiError';
 import { AuthedRequest } from '../types';
 
@@ -80,4 +81,9 @@ export const getInventory = asyncHandler(async (req, res: Response) => {
 export const getLowStock = asyncHandler(async (req, res: Response) => {
   const lowStock = await inventoryService.getLowStock(req.params.storeId);
   res.json({ lowStock });
+});
+
+export const getStockAlerts = asyncHandler(async (req, res: Response) => {
+  const alerts = await fetchStockAlerts(req.params.storeId);
+  res.json({ alerts });
 });

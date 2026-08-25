@@ -8,6 +8,7 @@ import {
   deleteProduct,
   getInventory,
   getLowStock,
+  getStockAlerts,
 } from '../controllers/product.controller';
 import {
   importProducts,
@@ -42,6 +43,12 @@ router.get(
   requireAuth,
   validate(storeIdParamSchema, 'params'),
   getLowStock
+);
+router.get(
+  '/alerts/:storeId',
+  requireAuth,
+  validate(storeIdParamSchema, 'params'),
+  getStockAlerts
 );
 
 router.get('/', requireAuth, validate(productQuerySchema, 'query'), listProducts);

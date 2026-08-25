@@ -242,6 +242,8 @@ export const storeUpdateSchema = z
     rfc: rfcSchema.optional().nullable(),
     regimenFiscal: regimenFiscalSchema.optional().nullable(),
     codigoPostal: codigoPostalSchema.optional().nullable(),
+    notifyOutOfStock: z.boolean().optional(),
+    notifyLowStock: z.boolean().optional(),
   })
   .refine((d) => Object.keys(d).length > 0, {
     message: 'Debe enviar al menos un campo a actualizar',
