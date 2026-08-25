@@ -325,3 +325,4 @@ main()
     throw e;
   })
   .finally(() => prisma.$disconnect());
+//UPDATE products UPDATE "Product" p  SET "costPrice" = "costPrice" / 100

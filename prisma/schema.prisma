@@ -39,7 +39,7 @@ enum UnidadVenta {
 // Motivo editable de cancelación (venta, factura, compra a proveedor).
 // La lista es por tienda y se administra desde el módulo de cancelaciones.
 model CancellationReason {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   storeId   String
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   name      String
@@ -65,7 +65,7 @@ enum MovementTipo {
 }
 
 model Store {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   name      String
   code      String   @unique
   address   String?
@@ -98,7 +98,7 @@ model Store {
 }
 
 model User {
-  id           String         @id @default(cuid())
+  id           String         @id @default(uuid())
   email        String         @unique
   password     String
   name         String
@@ -120,7 +120,7 @@ model User {
 }
 
 model RevokedToken {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   tokenHash String   @unique
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -131,7 +131,7 @@ model RevokedToken {
 }
 
 model Category {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   name      String
   storeId   String
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -142,7 +142,7 @@ model Category {
 }
 
 model Product {
-  id           String     @id @default(cuid())
+  id           String     @id @default(uuid())
   name         String
   sku          String?    @unique
   description  String?
@@ -168,7 +168,7 @@ model Product {
 }
 
 model Inventory {
-  id        String  @id @default(cuid())
+  id        String  @id @default(uuid())
   storeId   String
   store     Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
   productId String
@@ -184,7 +184,7 @@ model Inventory {
 // Motivo editable de un movimiento de inventario (merma, caducado, robo, reabasto, etc.).
 // La lista es por tienda y se administra desde el módulo de inventario.
 model MovementReason {
-  id           String        @id @default(cuid())
+  id           String        @id @default(uuid())
   storeId      String
   store        Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
   name         String
@@ -202,7 +202,7 @@ model MovementReason {
 // Bitácora de movimientos manuales de inventario. Cada fila ajusta Inventory.quantity
 // de forma atómica y guarda el saldo antes/después para trazabilidad.
 model StockMovement {
-  id                  String         @id @default(cuid())
+  id                  String         @id @default(uuid())
   storeId             String
   store               Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
   productId           String
@@ -243,7 +243,7 @@ model StockMovement {
 // Si existe para la fecha, el reporte usa este valor como "inventario inicial";
 // de lo contrario se reconstruye a partir de ventas/compras/movimientos del día.
 model InventorySnapshot {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   storeId   String
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   productId String
@@ -256,7 +256,7 @@ model InventorySnapshot {
 }
 
 model Sale {
-  id          String        @id @default(cuid())
+  id          String        @id @default(uuid())
   saleNumber  String        @unique
   storeId     String
   store       Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -284,7 +284,7 @@ model Sale {
 }
 
 model SaleItem {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   saleId      String
   sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   productId   String
@@ -304,7 +304,7 @@ model SaleItem {
 }
 
 model Supplier {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   name        String
   rfc         String?
   phone       String?
@@ -324,7 +324,7 @@ model Supplier {
 }
 
 model SupplierTransaction {
-  id            String                       @id @default(cuid())
+  id            String                       @id @default(uuid())
   supplierId    String
   supplier      Supplier                     @relation(fields: [supplierId], references: [id])
   storeId       String
@@ -348,7 +348,7 @@ model SupplierTransaction {
 }
 
 model SupplierTransactionItem {
-  id          String               @id @default(cuid())
+  id          String               @id @default(uuid())
   transactionId String
   transaction SupplierTransaction  @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   productId   String
@@ -364,7 +364,7 @@ model SupplierTransactionItem {
 }
 
 model AuditLog {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   storeId   String
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   userId    String?
@@ -380,7 +380,7 @@ model AuditLog {
 }
 
 model Cliente {
-  id               String   @id @default(cuid())
+  id               String   @id @default(uuid())
   storeId          String
   store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   rfc              String
@@ -402,7 +402,7 @@ model Cliente {
 }
 
 model Factura {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   folio     String   @unique
   storeId   String
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -440,7 +440,7 @@ model Factura {
 }
 
 model Cancellation {
-  id            String   @id @default(cuid())
+  id            String   @id @default(uuid())
   storeId       String
   store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   userId        String
@@ -469,7 +469,7 @@ model Cancellation {
 
 // Artículos cancelados dentro de una cancelación (usado en cancelaciones parciales).
 model CancellationItem {
-  id              String   @id @default(cuid())
+  id              String   @id @default(uuid())
   cancellationId  String
   cancellation    Cancellation @relation(fields: [cancellationId], references: [id], onDelete: Cascade)
   storeId         String

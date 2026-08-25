@@ -497,22 +497,14 @@ export async function confirmCancellation(
       include: { cancellationReason: true, items: true },
     });
 
-    // Marcar el cancellationId en los artículos de venta totalmente cancelados
+    // Vincular la cancelación a los artículos de venta cancelados parcialmente.
+    // SaleItem.cancellationId referencia a Cancellation (no a CancellationItem).
     if (cancellationItems.length) {
-      const created = await tx.cancellationItem.findMany({
-        where: { cancellationId: cancellation.id },
-        select: { id: true, saleItemId: true },
+      const saleItemIds = cancellationItems.map((it) => it.saleItemId);
+      await tx.saleItem.updateMany({
+        where: { id: { in: saleItemIds } },
+        data: { cancellationId: cancellation.id },
       });
-      const bySaleItem = new Map(created.map((c) => [c.saleItemId, c.id]));
-      for (const it of cancellationItems) {
-        const cancellationItemId = bySaleItem.get(it.saleItemId);
-        if (cancellationItemId) {
-          await tx.saleItem.update({
-            where: { id: it.saleItemId },
-            data: { cancellationId: cancellationItemId },
-          });
-        }
-      }
     }
 
     // Audit log
