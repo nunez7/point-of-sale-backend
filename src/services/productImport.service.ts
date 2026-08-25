@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Prisma, UnidadVenta } from '@prisma/client';
+import { Prisma, UnidadVenta } from '../../generated/prisma/client.js';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
 import { generarSkuAutomatico } from './product.service';

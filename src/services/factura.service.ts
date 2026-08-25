@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 import { colombiaStartOfDay, colombiaEndOfDay } from '../utils/dates';
 

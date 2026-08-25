@@ -10,7 +10,7 @@ import { clienteSchema, clienteUpdateSchema, clienteQuerySchema, idParamSchema }
 import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/role';
-import { Role } from '@prisma/client';
+import { Role } from '../../generated/prisma/client.js';
 
 const router = Router();
 

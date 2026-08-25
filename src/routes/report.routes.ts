@@ -11,7 +11,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/role';
 import { corteCajaQuerySchema } from '../schemas';
 import { validate } from '../middleware/validate';
-import { Role } from '@prisma/client';
+import { Role } from '../../generated/prisma/client.js';
 
 const router = Router();
 

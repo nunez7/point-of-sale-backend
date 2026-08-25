@@ -1,13 +1,17 @@
-import { PrismaClient } from '@prisma/client';
+import "dotenv/config";
+import { PrismaClient } from '../generated/prisma/client.js';
+import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   const store = await prisma.store.upsert({
     where: { code: 'STORE001' },
     update: {},
-    create: { name: 'Tienda Central', code: 'STORE001', address: 'Av. Principal 123' },
+    create: { name: 'Tienda Central', code: 'STORE001', address: 'Av. Principal 123', phone: '555-1234', codigoPostal: '11001', city: 'MX', country: 'Nayarit' },
   });
 
   const adminPassword = await bcrypt.hash('admin123', 10);

@@ -1,4 +1,4 @@
-import { Role, PaymentMethod } from '@prisma/client';
+import { Role, PaymentMethod } from '../../generated/prisma/client.js';
 import { Request } from 'express';
 
 export interface JwtPayload {

@@ -1,6 +1,6 @@
 import { prisma } from '../config/prisma';
 import bcrypt from 'bcryptjs';
-import { Role, Prisma } from '@prisma/client';
+import { Role, Prisma } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 
 export async function listUsers(storeId: string) {

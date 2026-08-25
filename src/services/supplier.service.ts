@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma';
-import { Prisma, MovementTipo, PaymentMethod } from '@prisma/client';
+import { Prisma, MovementTipo, PaymentMethod } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 import { colombiaStartOfDay, colombiaEndOfDay } from '../utils/dates';
 import { SupplierTxItemInput } from '../types';

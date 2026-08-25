@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaymentMethod, Role, UnidadVenta, MovementTipo } from '@prisma/client';
+import { PaymentMethod, Role, UnidadVenta, MovementTipo } from '../../generated/prisma/client.js';
 
 export const loginSchema = z.object({
   email: z.string().email('Email inválido'),

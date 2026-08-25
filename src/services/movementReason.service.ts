@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma';
-import { MovementTipo, Prisma } from '@prisma/client';
+import { MovementTipo, Prisma } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 
 export interface MovementReasonInput {

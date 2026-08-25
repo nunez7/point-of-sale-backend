@@ -7,17 +7,18 @@ Express + TypeScript + Prisma + PostgreSQL + Socket.io POS multi-store backend. 
 - `npm run typecheck` — `tsc --noEmit`; always run after edits (`noUnusedLocals`/`noUnusedParameters`/strict are on)
 - `npm run build` — `tsc -p tsconfig.json` to `dist/`
 - `npm start` — run compiled `dist/server.js`
-- `npm run prisma:generate` — `prisma generate`
-- `npm run prisma:migrate` — `prisma migrate dev` (creates DB migration)
+- `npm run prisma:generate` — `prisma generate` + compiles the generated TS client to `generated/` (`.js`+`.d.ts`) and removes the `.ts` sources
+- `npm run prisma:migrate` — `prisma migrate dev` (reads `prisma.config.ts` for the DB URL)
 - `npm run prisma:deploy` — apply migrations in prod
 - `npm run prisma:studio` — open Prisma Studio
-- `npm run prisma:seed` — `ts-node prisma/seed.ts`
+- `npm run prisma:seed` — `prisma db seed` (seed command defined in `prisma.config.ts`)
 - No test/lint tooling is installed.
 
 ## Setup gotchas
 - `.env` is required at package root; `src/config/env.ts` validates it with zod and calls `process.exit(1)` on any missing var. Copy `.env.example` (PostgreSQL `DATABASE_URL`, `JWT_SECRET`). The example's `PORT=4000` is stale — the frontend expects this server on 3001 (`PORT=3001` in `.env`).
 - No hay path alias en `tsconfig.json` (`baseUrl`/`paths` se removieron por deprecación en TS 5.x+); todos los imports son relativos. No introducir imports `@/` (ts-node-dev no los resuelve).
 - tsconfig: target ES2022, module node16, strict, noUnusedLocals/Parameters, noImplicitReturns.
+- **Prisma 7**: `prisma/schema.prisma` `datasource.db` has NO `url` (moved to `prisma.config.ts` `datasource.url`, loaded via `dotenv`). The Prisma Client is generated to `generated/prisma/` (gitignored) by `prisma-client` generator and MUST be imported as `../../generated/prisma/client.js` (path depth varies by file). Never import from `@prisma/client`. A `PrismaPg` driver adapter (`@prisma/adapter-pg`) is required — see `src/config/prisma.ts` and `prisma/seed.ts`. `npm run prisma:generate` compiles the generated TS to `.js`+`.d.ts` and deletes the `.ts` sources.
 
 ## Architecture
 - Layering: `routes/` (thin) → `controllers/` → `services/` (pure business logic, ACID) → `prisma`. Schemas in `src/schemas/`, middleware in `src/middleware/`.
@@ -41,4 +42,4 @@ Express + TypeScript + Prisma + PostgreSQL + Socket.io POS multi-store backend. 
 - All API messages/errors/logs in Spanish. Keep enum values (`Role`, `PaymentMethod`) as English uppercase constants.
 - Writes that affect business state also create an `AuditLog` row (action, entity, entityId, metadata).
 - Seed credentials: `admin@servicaja.com` / `admin123`, store `STORE001`.
-- Dependencies: express 4.19, prisma 5.19, typescript 5.5, zod 3.23, socket.io 4.7, bcryptjs, cors, helmet, morgan, winston, jsonwebtoken.
+- Dependencies: express 4.19, prisma 7.10, typescript 5.5, zod 3.23, socket.io 4.7, bcryptjs, cors, helmet, morgan, winston, jsonwebtoken, @prisma/adapter-pg, pg.
