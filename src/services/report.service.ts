@@ -24,6 +24,43 @@ const cancellationInclude = {
   cancellationReason: true,
 } satisfies Prisma.CancellationInclude;
 
+/**
+ * Ajuste por cancelaciones PARCIALES de ventas dentro de un rango.
+ * Las ventas totalmente canceladas (status CANCELED) ya se excluyen vía el
+ * filtro `status: 'COMPLETED'`, así que aquí solo restamos las parciales,
+ * tanto a nivel de monto (total) como de ganancia (profit de sus ítems).
+ */
+async function partialSaleCancellationAdjustment(
+  storeId: string,
+  desde: Date,
+  hasta: Date
+): Promise<{ revenue: number; profit: number; bySale: Map<string, number> }> {
+  const cancellations = await prisma.cancellation.findMany({
+    where: {
+      storeId,
+      entityType: 'SALE',
+      type: 'PARTIAL',
+      createdAt: { gte: desde, lte: hasta },
+    },
+    select: {
+      entityId: true,
+      total: true,
+      items: { select: { profit: true } },
+    },
+  });
+
+  let revenue = 0;
+  let profit = 0;
+  const bySale = new Map<string, number>();
+  for (const c of cancellations) {
+    const t = Number(c.total);
+    revenue += t;
+    profit += c.items.reduce((b, i) => b + Number(i.profit), 0);
+    bySale.set(c.entityId, (bySale.get(c.entityId) ?? 0) + t);
+  }
+  return { revenue, profit, bySale };
+}
+
 export async function dailyReport(storeId: string, date?: string) {
   await validateStore(storeId);
 
@@ -36,18 +73,34 @@ export async function dailyReport(storeId: string, date?: string) {
   });
 
   const totalSales = sales.reduce((sum, s) => sum + Number(s.total), 0);
-  const totalProfit = sales.reduce((sum, s) => sum + Number(s.profit), 0);
+  const totalProfitBruta = sales.reduce((sum, s) => sum + Number(s.profit), 0);
   const count = sales.length;
-  const profitMargin = totalSales > 0 ? (totalProfit / totalSales) * 100 : 0;
+
+  const adj = await partialSaleCancellationAdjustment(
+    storeId,
+    colombiaStartOfDay(date),
+    colombiaEndOfDay(date)
+  );
+  const totalRevenue = Math.max(0, totalSales - adj.revenue);
+  const totalProfit = Math.max(0, totalProfitBruta - adj.profit);
+
+  const salesByPayment: Record<string, number> = {};
+  for (const s of sales) {
+    const key = s.paymentMethod;
+    salesByPayment[key] = (salesByPayment[key] ?? 0) + Number(s.total);
+  }
+
+  const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
 
   return {
     storeId,
     date: colombiaStartOfDay(date).toISOString().slice(0, 10),
     salesCount: count,
-    totalSales,
+    totalRevenue,
     totalProfit,
     profitMargin,
-    averageTicket: count > 0 ? totalSales / count : 0,
+    averageTicket: count > 0 ? totalRevenue / count : 0,
+    salesByPayment,
   };
 }
 
@@ -96,6 +149,27 @@ export async function monthlyReport(storeId: string, month?: string) {
     perDay.set(dayKey, entry);
   }
 
+  // Restar cancelaciones parciales de ventas según el día en que se cancelaron.
+  const cancelacionesParciales = await prisma.cancellation.findMany({
+    where: {
+      storeId,
+      entityType: 'SALE',
+      type: 'PARTIAL',
+      createdAt: { gte: colombiaStartOfDay(firstKey), lte: colombiaEndOfDay(lastKey) },
+    },
+    select: { createdAt: true, total: true, items: { select: { profit: true } } },
+  });
+  for (const c of cancelacionesParciales) {
+    const dayKey = colombiaLocalDateKey(c.createdAt);
+    const entry = perDay.get(dayKey);
+    if (entry) {
+      const rev = Number(c.total);
+      const prof = c.items.reduce((b, i) => b + Number(i.profit), 0);
+      entry.totalRevenue = Math.max(0, entry.totalRevenue - rev);
+      entry.totalProfit = Math.max(0, entry.totalProfit - prof);
+    }
+  }
+
   return Array.from(perDay.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([dayKey, v]) => ({
@@ -134,13 +208,21 @@ export async function corteCaja(
     orderBy: { createdAt: 'desc' },
   });
 
+  // Ajuste por ventas parcialmente canceladas: monto neto por venta.
+  const adj = await partialSaleCancellationAdjustment(storeId, desde, hasta);
+  const saleNetTotal = new Map<string, number>();
+  for (const s of sales) {
+    const ajuste = adj.bySale.get(s.id) ?? 0;
+    saleNetTotal.set(s.id, Math.max(0, Number(s.total) - ajuste));
+  }
+
   const ventasDetalle = sales.map((sale) => ({
     id: sale.id,
     saleNumber: sale.saleNumber,
     createdAt: sale.createdAt.toISOString(),
     userId: sale.userId,
     userName: sale.user?.name ?? '—',
-    total: Number(sale.total),
+    total: saleNetTotal.get(sale.id) ?? 0,
     discount: Number(sale.discount),
     paymentMethod: sale.paymentMethod,
     status: sale.status,
@@ -152,21 +234,27 @@ export async function corteCaja(
     })),
   }));
 
-  const totalRevenue = sales.reduce((a, s) => a + Number(s.total), 0);
+  const totalRevenueBruta = sales.reduce((a, s) => a + Number(s.total), 0);
   const totalDiscount = sales.reduce((a, s) => a + Number(s.discount), 0);
-  const totalProfit = sales.reduce((a, s) => a + Number(s.profit), 0);
+  const totalProfitBruta = sales.reduce((a, s) => a + Number(s.profit), 0);
   const salesCount = sales.length;
-  const averageTicket = salesCount > 0 ? totalRevenue / salesCount : 0;
+
+  // "Total vendido" = cantidad total de ventas (bruto).
+  // "Efectivo esperado en caja" = total vendido - cancelaciones parciales.
+  const totalRevenue = totalRevenueBruta;
+  const cashExpectedNeto = Math.max(0, totalRevenueBruta - adj.revenue);
+  const totalProfit = Math.max(0, totalProfitBruta - adj.profit);
+  const averageTicket = salesCount > 0 ? totalRevenueBruta / salesCount : 0;
 
   const salesByPayment: Record<string, { count: number; total: number }> = {};
   for (const s of sales) {
     const key = s.paymentMethod;
     const e = salesByPayment[key] ?? { count: 0, total: 0 };
     e.count += 1;
-    e.total += Number(s.total);
+    e.total += saleNetTotal.get(s.id) ?? 0;
     salesByPayment[key] = e;
   }
-  const cashExpected = salesByPayment['CASH']?.total ?? 0;
+  const cashExpected = cashExpectedNeto;
 
   const cancelaciones = await prisma.cancellation.findMany({
     where: { storeId, createdAt: { gte: desde, lte: hasta } },
@@ -210,7 +298,7 @@ export async function corteCaja(
       const hora = new Date(s.createdAt.getTime() + COLOMBIA_OFFSET_MS).getUTCHours();
       const e = porHora.get(hora) ?? { count: 0, total: 0 };
       e.count += 1;
-      e.total += Number(s.total);
+      e.total += saleNetTotal.get(s.id) ?? 0;
       porHora.set(hora, e);
     }
     for (let h = 0; h < 24; h++) {
@@ -223,7 +311,7 @@ export async function corteCaja(
       const dk = colombiaLocalDateKey(s.createdAt);
       const e = porDia.get(dk) ?? { count: 0, total: 0 };
       e.count += 1;
-      e.total += Number(s.total);
+      e.total += saleNetTotal.get(s.id) ?? 0;
       porDia.set(dk, e);
     }
     for (const [dk, e] of [...porDia.entries()].sort(([a], [b]) => a.localeCompare(b))) {
@@ -257,7 +345,7 @@ export async function corteCaja(
 
 export async function productsReport(storeId: string) {
   const saleItems = await prisma.saleItem.findMany({
-    where: { sale: { storeId, status: 'COMPLETED' } },
+    where: { sale: { storeId, status: 'COMPLETED' }, canceledAt: null },
     include: { product: { include: { category: true } } },
   });
 
@@ -297,7 +385,7 @@ export async function profitMarginByCategory(storeId: string) {
   await validateStore(storeId);
 
   const saleItems = await prisma.saleItem.findMany({
-    where: { sale: { storeId, status: 'COMPLETED' } },
+    where: { sale: { storeId, status: 'COMPLETED' }, canceledAt: null },
     include: { product: { include: { category: true } } },
   });
 

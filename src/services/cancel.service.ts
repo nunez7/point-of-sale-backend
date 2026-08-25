@@ -335,6 +335,15 @@ export async function confirmCancellation(
                 'INSUFFICIENT_TO_CANCEL'
               );
             }
+            // Venta a granel (peso/volumen): se cancela el artículo completo,
+            // no por partes.
+            const esGranel = !!saleItem.unidad && saleItem.unidad !== 'u';
+            if (esGranel && qty.lt(saleItem.quantity)) {
+              throw ApiError.badRequest(
+                `El artículo granel "${saleItem.product.name}" debe cancelarse en su totalidad`,
+                'GRANEL_FULL_ONLY'
+              );
+            }
 
             // Restaurar inventario solo de este artículo
             await tx.inventory.upsert({
