@@ -85,12 +85,32 @@ export const saleSchema = z.object({
   paymentMethod: paymentMethodSchema,
   discount: z.number().min(0, 'El descuento no puede ser negativo').max(100, 'El descuento no puede ser mayor a 100%').default(0),
   storeId: z.string().min(1),
+  // COMPLETED = venta inmediata (descuenta inventario); PENDING = pedido
+  // (no descuenta inventario hasta confirmarse).
+  status: z.enum(['COMPLETED', 'PENDING']).default('COMPLETED'),
+  // Pedido: cliente asociado (opcional) y notas libres.
+  clienteId: z.string().nullable().optional(),
+  notes: z.string().max(500, 'Máximo 500 caracteres').nullable().optional(),
 });
 
 export const saleQuerySchema = z.object({
   storeId: z.string().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
+});
+
+// Listado de pedidos: filtra por estado (PENDING por defecto) y rango de fechas.
+export const orderQuerySchema = z.object({
+  storeId: z.string().min(1, 'El identificador de la tienda es requerido'),
+  status: z.enum(['PENDING', 'COMPLETED', 'CANCELED', 'ALL']).default('PENDING'),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha inicial debe tener formato YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
+    .optional(),
 });
 
 export const supplierSchema = z.object({

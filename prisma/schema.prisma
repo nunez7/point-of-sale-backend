@@ -273,7 +273,16 @@ model Sale {
   profit      Decimal       @db.Decimal(12, 2)
   profitMargin Decimal      @db.Decimal(12, 2)
   paymentMethod PaymentMethod
+  // COMPLETED (venta confirmada), PENDING (pedido sin confirmar, no descuenta
+  // inventario), CANCELED (venta o pedido anulado).
   status      String        @default("COMPLETED")
+  // Pedido: cliente asociado (opcional) y notas libres.
+  clienteId   String?
+  cliente     Cliente?      @relation(fields: [clienteId], references: [id])
+  notes       String?
+  // Quién y cuándo confirmó el pedido (status PENDING -> COMPLETED).
+  confirmedAt DateTime?
+  confirmedBy String?
   canceledAt  DateTime?
   canceledBy  String?
   cancellationReasonId  String?
@@ -285,6 +294,8 @@ model Sale {
 
   @@index([storeId, createdAt])
   @@index([saleNumber])
+  @@index([status])
+  @@index([clienteId])
 }
 
 model SaleItem {
@@ -400,6 +411,8 @@ model Cliente {
   updatedAt        DateTime @updatedAt
 
   facturas Factura[]
+
+  sales    Sale[]
 
   @@unique([storeId, rfc])
   @@index([storeId, nombreRazonSocial])

@@ -10,6 +10,12 @@ export interface CreateSaleInput {
   items: SaleItemInput[];
   paymentMethod: string;
   discount: number;
+  // COMPLETED = venta inmediata (descuenta inventario); PENDING = pedido
+  // (solo valida stock, no descuenta hasta confirmarse).
+  status?: 'COMPLETED' | 'PENDING';
+  // Pedido: cliente asociado y notas libres (opcionales).
+  clienteId?: string | null;
+  notes?: string | null;
 }
 
 export interface SaleResult {
@@ -18,6 +24,7 @@ export interface SaleResult {
   total: number;
   profit: number;
   profitMargin: number;
+  status: string;
 }
 
 type Tx = Prisma.TransactionClient;
@@ -137,6 +144,8 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
 
     const saleNumber = await generateSaleNumber(tx, input.storeId, store.code);
 
+    const isPending = input.status === 'PENDING';
+
     const sale = await tx.sale.create({
       data: {
         saleNumber,
@@ -148,6 +157,9 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
         profit: totalProfit,
         profitMargin: total.gt(0) ? totalProfit.div(total).mul(100) : new Prisma.Decimal(0),
         paymentMethod: input.paymentMethod as PaymentMethod,
+        status: isPending ? 'PENDING' : 'COMPLETED',
+        ...(input.clienteId ? { clienteId: input.clienteId } : {}),
+        ...(input.notes ? { notes: input.notes } : {}),
         items: {
           create: preparedItems.map((it) => ({
             productId: it.productId,
@@ -164,18 +176,21 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
       include: { items: true },
     });
 
-    // Deduct inventory atomically
-    for (const it of preparedItems) {
-      const updated = await tx.inventory.updateMany({
-        where: {
-          storeId: input.storeId,
-          productId: it.productId,
-          quantity: { gte: it.quantity },
-        },
-        data: { quantity: { decrement: it.quantity } },
-      });
-      if (updated.count === 0) {
-        throw ApiError.badRequest('Stock insuficiente al deducir inventario', 'INSUFFICIENT_STOCK');
+    // Solo las ventas inmediatas (COMPLETED) descuentan inventario. Los
+    // pedidos (PENDING) validan stock arriba pero no lo reservan ni descuentan.
+    if (!isPending) {
+      for (const it of preparedItems) {
+        const updated = await tx.inventory.updateMany({
+          where: {
+            storeId: input.storeId,
+            productId: it.productId,
+            quantity: { gte: it.quantity },
+          },
+          data: { quantity: { decrement: it.quantity } },
+        });
+        if (updated.count === 0) {
+          throw ApiError.badRequest('Stock insuficiente al deducir inventario', 'INSUFFICIENT_STOCK');
+        }
       }
     }
 
@@ -184,7 +199,7 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
       data: {
         storeId: input.storeId,
         userId: input.userId,
-        action: 'SALE',
+        action: isPending ? 'CREATE_ORDER' : 'SALE',
         entity: 'SALE',
         entityId: sale.id,
         metadata: {
@@ -192,6 +207,8 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
           total: total.toString(),
           items: input.items.length,
           paymentMethod: input.paymentMethod,
+          status: isPending ? 'PENDING' : 'COMPLETED',
+          ...(input.clienteId ? { clienteId: input.clienteId } : {}),
         },
       },
     });
@@ -202,6 +219,7 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
       total: Number(total),
       profit: Number(totalProfit),
       profitMargin: Number(sale.profitMargin),
+      status: isPending ? 'PENDING' : 'COMPLETED',
     };
   });
 }
@@ -239,6 +257,11 @@ function serializeSale<
       unitPrice: Number(it.unitPrice),
       costPrice: Number(it.costPrice),
       profit: Number(it.profit),
+      productName:
+        (it as { product?: { name?: string }; productName?: string }).product?.name ??
+        (it as { productName?: string }).productName,
+      productPresentacion:
+        (it as { product?: { presentacion?: string | null } }).product?.presentacion ?? null,
     })),
   };
 }
@@ -375,4 +398,144 @@ export async function cancelSale(
 
     return canceled;
   });
+}
+
+// Confirma un pedido (status PENDING): reválida y descuenta inventario de
+// forma atómica, y lo pasa a COMPLETED. Hasta este momento el pedido no
+// afectó el inventario.
+export async function confirmOrder(id: string, storeId: string, userId: string) {
+  return prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findFirst({
+      where: { id, storeId, status: 'PENDING' },
+      include: { items: true },
+    });
+
+    if (!sale) {
+      throw ApiError.notFound('Pedido no encontrado o ya confirmado', 'ORDER_NOT_FOUND');
+    }
+
+    // Reválida stock disponible (puede haber cambiado desde la creación).
+    for (const item of sale.items) {
+      const inventory = await tx.inventory.findUnique({
+        where: { storeId_productId: { storeId, productId: item.productId } },
+      });
+      const stock = inventory?.quantity ?? new Prisma.Decimal(0);
+      if (new Prisma.Decimal(stock).lessThan(item.quantity)) {
+        throw ApiError.badRequest(
+          `Stock insuficiente para confirmar el pedido (disponible: ${Number(stock)})`,
+          'INSUFFICIENT_STOCK'
+        );
+      }
+    }
+
+    // Descuenta inventario de forma atómica.
+    for (const item of sale.items) {
+      const updated = await tx.inventory.updateMany({
+        where: {
+          storeId,
+          productId: item.productId,
+          quantity: { gte: item.quantity },
+        },
+        data: { quantity: { decrement: item.quantity } },
+      });
+      if (updated.count === 0) {
+        throw ApiError.badRequest('Stock insuficiente al deducir inventario', 'INSUFFICIENT_STOCK');
+      }
+    }
+
+    const confirmed = await tx.sale.update({
+      where: { id },
+      data: {
+        status: 'COMPLETED',
+        confirmedAt: new Date(),
+        confirmedBy: userId,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        storeId,
+        userId,
+        action: 'CONFIRM_ORDER',
+        entity: 'SALE',
+        entityId: id,
+        metadata: {
+          saleNumber: sale.saleNumber,
+          total: sale.total.toString(),
+        },
+      },
+    });
+
+    return confirmed;
+  });
+}
+
+// Cancela un pedido pendiente (status PENDING). Como nunca descontó
+// inventario, no es necesario reponerlo; solo se marca como CANCELED.
+export async function cancelOrder(id: string, storeId: string, userId: string) {
+  return prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findFirst({
+      where: { id, storeId, status: 'PENDING' },
+    });
+
+    if (!sale) {
+      throw ApiError.notFound('Pedido no encontrado o ya confirmado', 'ORDER_NOT_FOUND');
+    }
+
+    const canceled = await tx.sale.update({
+      where: { id },
+      data: {
+        status: 'CANCELED',
+        canceledAt: new Date(),
+        canceledBy: userId,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        storeId,
+        userId,
+        action: 'CANCEL_ORDER',
+        entity: 'SALE',
+        entityId: id,
+        metadata: {
+          saleNumber: sale.saleNumber,
+        },
+      },
+    });
+
+    return canceled;
+  });
+}
+
+// Lista pedidos de la tienda. status: PENDING (defecto), COMPLETED, CANCELED
+// o ALL. Incluye el cliente asociado cuando existe. Opcionalmente filtra por
+// rango de fechas de creación (createdAt).
+export async function listOrders(filters: {
+  storeId: string;
+  status: 'PENDING' | 'COMPLETED' | 'CANCELED' | 'ALL';
+  startDate?: string;
+  endDate?: string;
+}) {
+  const where: Record<string, unknown> = { storeId: filters.storeId };
+  if (filters.status !== 'ALL') where.status = filters.status;
+
+  if (filters.startDate || filters.endDate) {
+    const createdAt: Record<string, Date> = {};
+    if (filters.startDate) createdAt.gte = colombiaStartOfDay(filters.startDate);
+    if (filters.endDate) createdAt.lte = colombiaEndOfDay(filters.endDate);
+    if (Object.keys(createdAt).length) where.createdAt = createdAt;
+  }
+
+  const sales = await prisma.sale.findMany({
+    where,
+    include: {
+      items: { include: { product: true } },
+      user: { select: { id: true, name: true, email: true } },
+      cliente: { select: { id: true, nombreRazonSocial: true, rfc: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return sales.map(serializeSale);
 }
