@@ -66,3 +66,11 @@ export const getSessionReport = asyncAuthHandler(async (req: AuthedRequest, res:
   const report = await cajaSessionService.getSessionReport(id, storeId);
   res.json(report);
 });
+
+export const getSessionPreview = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const storeId = req.user!.storeId;
+  const id = req.params.id;
+  if (!id) throw ApiError.badRequest('El id de la sesión es requerido', 'BAD_REQUEST');
+  const preview = await cajaSessionService.previsualizarCorte(id, storeId);
+  res.json(preview);
+});

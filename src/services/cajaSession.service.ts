@@ -50,11 +50,12 @@ export async function openCaja(
     throw ApiError.badRequest('La caja está inactiva', 'CAJA_INACTIVE');
   }
 
-  // Un vendedor solo puede abrir la caja que tiene asignada.
-  if (role === Role.VENDEDOR && caja.assignedUserId !== userId) {
+  // Solo un administrador o gerente puede abrir una caja; el cajero (vendedor)
+  // opera la sesión que un administrador/gerente haya abierto.
+  if (role === Role.VENDEDOR) {
     throw ApiError.forbidden(
-      'Solo puedes abrir la caja que tienes asignada',
-      'CAJA_NOT_ASSIGNED'
+      'Solo un administrador o gerente puede abrir la caja',
+      'CAJA_OPEN_FORBIDDEN'
     );
   }
 
@@ -106,30 +107,13 @@ export async function openCaja(
   return session;
 }
 
-// Cierra una caja: calcula el corte (efectivo/electrónico) sumando ventas y
-// restando compras del turno, y registra las diferencias declaradas.
-export async function closeCaja(
-  sessionId: string,
-  storeId: string,
-  userId: string,
-  role: string,
-  data: CloseCajaInput
+// Calcula el corte de una sesión (efectivo/electrónico) sumando las ventas del
+// turno por método de pago y restando las compras pagadas con dinero de caja.
+// Se comparte entre el cierre y la previsualización del corte.
+export async function calcularCorte(
+  session: { id: string; openingCash: Prisma.Decimal | number; openingElectronic: Prisma.Decimal | number },
+  storeId: string
 ) {
-  const session = await prisma.cajaSession.findFirst({
-    where: { id: sessionId, storeId },
-    include: { caja: true },
-  });
-  if (!session) throw ApiError.notFound('Sesión de caja no encontrada', 'CAJA_SESSION_NOT_FOUND');
-  if (session.status === 'CLOSED') {
-    throw ApiError.badRequest('La caja ya está cerrada', 'CAJA_YA_CERRADA');
-  }
-  if (role === Role.VENDEDOR && session.userId !== userId) {
-    throw ApiError.forbidden(
-      'Solo el operador que abrió la caja puede cerrarla',
-      'CAJA_NOT_OPERATOR'
-    );
-  }
-
   const saleGroups = await prisma.sale.groupBy({
     by: ['paymentMethod'],
     where: { cajaSessionId: session.id, storeId, status: 'COMPLETED' },
@@ -164,6 +148,71 @@ export async function closeCaja(
   // del corte; las pagadas con efectivo de dueño no afectan el corte.
   const expectedCash = openingCash.plus(salesCash).minus(purchasesCash);
   const expectedElectronic = openingElectronic.plus(salesElectronic).minus(purchasesElectronic);
+
+  return {
+    salesCash,
+    salesElectronic,
+    purchasesCash,
+    purchasesElectronic,
+    expectedCash,
+    expectedElectronic,
+  };
+}
+
+// Previsualiza el corte de una sesión abierta (sin cerrarla) para mostrar los
+// montos esperados en el momento del cierre.
+export async function previsualizarCorte(sessionId: string, storeId: string) {
+  const session = await prisma.cajaSession.findFirst({
+    where: { id: sessionId, storeId },
+    include: { caja: true },
+  });
+  if (!session) throw ApiError.notFound('Sesión de caja no encontrada', 'CAJA_SESSION_NOT_FOUND');
+  if (session.status === 'CLOSED') {
+    throw ApiError.badRequest('La caja ya está cerrada', 'CAJA_YA_CERRADA');
+  }
+  const cut = await calcularCorte(session, storeId);
+  return {
+    salesCash: Number(cut.salesCash),
+    salesElectronic: Number(cut.salesElectronic),
+    purchasesCash: Number(cut.purchasesCash),
+    purchasesElectronic: Number(cut.purchasesElectronic),
+    expectedCash: Number(cut.expectedCash),
+    expectedElectronic: Number(cut.expectedElectronic),
+  };
+}
+
+// Cierra una caja: calcula el corte (efectivo/electrónico) sumando ventas y
+// restando compras del turno, y registra las diferencias declaradas.
+export async function closeCaja(
+  sessionId: string,
+  storeId: string,
+  userId: string,
+  role: string,
+  data: CloseCajaInput
+) {
+  const session = await prisma.cajaSession.findFirst({
+    where: { id: sessionId, storeId },
+    include: { caja: true },
+  });
+  if (!session) throw ApiError.notFound('Sesión de caja no encontrada', 'CAJA_SESSION_NOT_FOUND');
+  if (session.status === 'CLOSED') {
+    throw ApiError.badRequest('La caja ya está cerrada', 'CAJA_YA_CERRADA');
+  }
+  if (role === Role.VENDEDOR && session.userId !== userId) {
+    throw ApiError.forbidden(
+      'Solo el operador que abrió la caja puede cerrarla',
+      'CAJA_NOT_OPERATOR'
+    );
+  }
+
+  const cut = await calcularCorte(session, storeId);
+
+  const salesCash = cut.salesCash;
+  const salesElectronic = cut.salesElectronic;
+  const purchasesCash = cut.purchasesCash;
+  const purchasesElectronic = cut.purchasesElectronic;
+  const expectedCash = cut.expectedCash;
+  const expectedElectronic = cut.expectedElectronic;
 
   const closingCash = new Prisma.Decimal(data.closingCash);
   const closingElectronic = new Prisma.Decimal(data.closingElectronic);

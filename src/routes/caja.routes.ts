@@ -11,6 +11,7 @@ import {
   getActiveSession,
   listSessions,
   getSessionReport,
+  getSessionPreview,
 } from '../controllers/cajaSession.controller';
 import {
   idParamSchema,
@@ -58,6 +59,7 @@ router.get('/sessions/active', requireAuth, getActiveSession);
 router.post(
   '/:id/open',
   requireAuth,
+  requireRole(Role.ADMIN, Role.GERENTE),
   validate(idParamSchema, 'params'),
   validate(cajaOpenSchema),
   openCaja
@@ -74,6 +76,12 @@ router.get(
   requireAuth,
   validate(cajaSessionQuerySchema, 'query'),
   listSessions
+);
+router.get(
+  '/sessions/:id/expected',
+  requireAuth,
+  validate(idParamSchema, 'params'),
+  getSessionPreview
 );
 router.get(
   '/sessions/:id/report',
