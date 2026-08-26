@@ -214,7 +214,7 @@ model StockMovement {
   store               Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
   productId           String
   product             Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
-  userId              String
+  userId              String?
   user                User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
   reasonId            String
   reason              MovementReason @relation(fields: [reasonId], references: [id])
@@ -475,8 +475,8 @@ model Cancellation {
   id            String   @id @default(uuid())
   storeId       String
   store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   entityType    String
   entityId      String
