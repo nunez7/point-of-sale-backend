@@ -5,7 +5,6 @@ import {
   mexicoStartOfDay,
   mexicoEndOfDay,
   mexicoLocalDateKey,
-  MEXICO_OFFSET_MS,
 } from '../utils/dates';
 import { getInventoryReport } from './stockMovement.service';
 
@@ -119,9 +118,9 @@ export async function monthlyReport(storeId: string, month?: string) {
       throw ApiError.badRequest('Mes inválido', 'INVALID_DATE');
     }
   } else {
-    const now = new Date(Date.now() + MEXICO_OFFSET_MS);
-    year = now.getUTCFullYear();
-    monthIdx = now.getUTCMonth();
+    const now = new Date();
+    year = now.getFullYear();
+    monthIdx = now.getMonth();
   }
 
   const firstKey = `${year}-${String(monthIdx + 1).padStart(2, '0')}-01`;
@@ -196,6 +195,18 @@ export async function corteCaja(
     select: { controlCajas: true },
   });
   const controlCajas = storeCfg?.controlCajas ?? false;
+
+  // Cuando la tienda usa control de cajas, incluimos el detalle de las sesiones
+  // (lo mismo que el reporte de cierre de caja) para que el corte sea completo,
+  // imprimible y exportable.
+  let cajas: Awaited<ReturnType<typeof cierreCaja>>["rows"] = [];
+  if (controlCajas) {
+    const cierreRes = await cierreCaja(storeId, {
+      startDate: startDate ?? date,
+      endDate: endDate ?? date,
+    });
+    cajas = cierreRes.rows;
+  }
 
   // Anclar a día de México: el rango [desde, hasta] cubre el día calendario
   // completo de México sin importar la zona horaria del servidor.
@@ -369,7 +380,7 @@ export async function corteCaja(
   if (esDiaUnico) {
     const porHora = new Map<number, { count: number; total: number }>();
     for (const s of sales) {
-      const hora = new Date(s.createdAt.getTime() + MEXICO_OFFSET_MS).getUTCHours();
+      const hora = s.createdAt.getHours();
       const e = porHora.get(hora) ?? { count: 0, total: 0 };
       e.count += 1;
       e.total += saleNetTotal.get(s.id) ?? 0;
@@ -411,6 +422,7 @@ export async function corteCaja(
     movimientosEfectivoIngreso,
     movimientosEfectivoEgreso,
     comprasCajaEfectivo,
+    cajas,
     salesByPayment,
     byHour,
     byDay,
