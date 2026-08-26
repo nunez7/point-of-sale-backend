@@ -65,6 +65,7 @@ export const createSupplierTransaction = asyncAuthHandler(
       userId: req.user!.id,
       items,
       paymentMethod,
+      paidFrom: req.body.paidFrom ?? "DUENO",
       cajaSessionId: req.body.cajaSessionId ?? null,
     });
 

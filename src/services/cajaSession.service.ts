@@ -77,11 +77,14 @@ export async function openCaja(
     await registerOpening(storeId);
   }
 
+  const openedAt = new Date();
   const session = await prisma.cajaSession.create({
     data: {
       storeId,
       cajaId,
       userId,
+      openedAt,
+      openingDate: colombiaLocalDateKey(openedAt),
       openingCash: new Prisma.Decimal(data.openingCash),
       openingElectronic: new Prisma.Decimal(data.openingElectronic),
       openingNote: data.openingNote ?? null,
@@ -134,7 +137,7 @@ export async function closeCaja(
   });
   const purchaseGroups = await prisma.supplierTransaction.groupBy({
     by: ['paymentMethod'],
-    where: { cajaSessionId: session.id, storeId, status: 'COMPLETED' },
+    where: { cajaSessionId: session.id, storeId, status: 'COMPLETED', paidFrom: 'CAJA' },
     _sum: { total: true },
   });
 
@@ -157,6 +160,8 @@ export async function closeCaja(
   const openingCash = new Prisma.Decimal(session.openingCash);
   const openingElectronic = new Prisma.Decimal(session.openingElectronic);
 
+  // Solo las compras pagadas con dinero de caja (paidFrom = "CAJA") descuentan
+  // del corte; las pagadas con efectivo de dueño no afectan el corte.
   const expectedCash = openingCash.plus(salesCash).minus(purchasesCash);
   const expectedElectronic = openingElectronic.plus(salesElectronic).minus(purchasesElectronic);
 
@@ -166,11 +171,13 @@ export async function closeCaja(
   const diffCash = closingCash.minus(expectedCash);
   const diffElectronic = closingElectronic.minus(expectedElectronic);
 
+  const closedAt = new Date();
   const closed = await prisma.cajaSession.update({
     where: { id: session.id },
     data: {
       status: 'CLOSED',
-      closedAt: new Date(),
+      closedAt,
+      closingDate: colombiaLocalDateKey(closedAt),
       closedBy: userId,
       closingCash,
       closingElectronic,
@@ -295,6 +302,7 @@ export async function getSessionReport(sessionId: string, storeId: string) {
       reference: true,
       total: true,
       paymentMethod: true,
+      paidFrom: true,
       status: true,
       createdAt: true,
     },

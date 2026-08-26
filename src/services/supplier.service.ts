@@ -235,7 +235,9 @@ export interface CreateSupplierTxInput {
   userId: string;
   items: SupplierTxItemInput[];
   paymentMethod: string;
-  // Sesión de caja que procesa la compra (corte de caja).
+  // Origen del pago: "CAJA" (descuenta del corte) o "DUENO" (no afecta corte).
+  paidFrom?: "CAJA" | "DUENO" | null;
+  // Sesión de caja que procesa la compra (solo cuando paidFrom = "CAJA").
   cajaSessionId?: string | null;
 }
 
@@ -253,15 +255,40 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
       throw ApiError.notFound('Tienda no encontrada', 'STORE_NOT_FOUND');
     }
 
-    if (input.cajaSessionId) {
-      const session = await tx.cajaSession.findFirst({
-        where: { id: input.cajaSessionId, storeId: input.storeId, status: 'OPEN' },
-      });
-      if (!session) {
-        throw ApiError.badRequest(
-          'La sesión de caja no es válida o no está abierta',
-          'CAJA_SESSION_INVALID'
-        );
+    // Si la compra se paga con dinero de caja, debe vincularse a la sesión
+    // abierta del usuario (su caja asignada o la que operó). Si se paga con
+    // efectivo de dueño, queda registrada sin afectar el corte.
+    const paidFrom = input.paidFrom ?? "DUENO";
+    if (paidFrom === "CAJA") {
+      if (input.cajaSessionId) {
+        const session = await tx.cajaSession.findFirst({
+          where: { id: input.cajaSessionId, storeId: input.storeId, status: 'OPEN' },
+        });
+        if (!session) {
+          throw ApiError.badRequest(
+            'La sesión de caja no es válida o no está abierta',
+            'CAJA_SESSION_INVALID'
+          );
+        }
+      } else {
+        const active = await tx.cajaSession.findFirst({
+          where: {
+            storeId: input.storeId,
+            status: 'OPEN',
+            OR: [
+              { userId: input.userId },
+              { caja: { assignedUserId: input.userId } },
+            ],
+          },
+          orderBy: { openedAt: 'desc' },
+        });
+        if (!active) {
+          throw ApiError.badRequest(
+            'Debe abrir la caja antes de registrar compras con dinero de caja',
+            'CAJA_SESSION_REQUIRED'
+          );
+        }
+        input.cajaSessionId = active.id;
       }
     }
 
@@ -325,6 +352,7 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
         reference,
         total,
         paymentMethod: input.paymentMethod as PaymentMethod,
+        paidFrom,
         ...(input.cajaSessionId ? { cajaSessionId: input.cajaSessionId } : {}),
         items: {
           create: preparedItems.map((it) => ({

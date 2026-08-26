@@ -371,7 +371,10 @@ model SupplierTransaction {
   reference     String                       @unique
   total         Decimal                      @db.Decimal(12, 2)
   status        String                       @default("COMPLETED")
-  // Sesión de caja que procesó la compra (corte de caja).
+  // Origen del pago: "CAJA" (dinero del tPV, descuenta del corte) o "DUENO"
+  // (efectivo del dueño, se registra sin afectar el corte de caja).
+  paidFrom     String                       @default("DUENO")
+  // Sesión de caja que procesó la compra (solo cuando paidFrom = "CAJA").
   cajaSessionId String?
   cajaSession  CajaSession? @relation(fields: [cajaSessionId], references: [id], onDelete: SetNull)
   canceledAt    DateTime?
@@ -385,6 +388,7 @@ model SupplierTransaction {
   @@index([supplierId])
   @@index([userId])
   @@index([cajaSessionId])
+  @@index([paidFrom])
 }
 
 model SupplierTransactionItem {
@@ -574,6 +578,7 @@ model CajaSession {
 
   // Apertura
   openedAt           DateTime @default(now())
+  openingDate        String?  // fecha local Colombia (yyyy-mm-dd) para filtrar por día
   openingCash        Decimal  @db.Decimal(12, 2) @default(0)
   openingElectronic  Decimal  @db.Decimal(12, 2) @default(0)
   openingNote        String?
@@ -581,6 +586,7 @@ model CajaSession {
 
   // Cierre (declarado por el operador)
   closedAt           DateTime?
+  closingDate        String? // fecha local Colombia (yyyy-mm-dd) del cierre
   closedBy           String?
   closingCash        Decimal? @db.Decimal(12, 2)
   closingElectronic  Decimal? @db.Decimal(12, 2)
@@ -600,6 +606,7 @@ model CajaSession {
   supplierTxs SupplierTransaction[]
 
   @@index([storeId, status])
+  @@index([storeId, openingDate])
   @@index([cajaId])
   @@index([userId])
 }

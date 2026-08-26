@@ -56,15 +56,40 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
     const store = await tx.store.findUnique({ where: { id: input.storeId } });
     if (!store) throw ApiError.notFound('Tienda no encontrada', 'STORE_NOT_FOUND');
 
-    if (input.cajaSessionId) {
-      const session = await tx.cajaSession.findFirst({
-        where: { id: input.cajaSessionId, storeId: input.storeId, status: 'OPEN' },
-      });
-      if (!session) {
-        throw ApiError.badRequest(
-          'La sesión de caja no es válida o no está abierta',
-          'CAJA_SESSION_INVALID'
-        );
+    // Si la tienda usa control de cajas, la venta debe estar ligada a una
+    // sesión abierta; de lo contrario quedaría fuera del corte de caja. Si el
+    // cliente no envía el id de sesión, la resolvemos desde la sesión abierta
+    // del usuario (su caja asignada o la que operó).
+    if (store.controlCajas) {
+      if (input.cajaSessionId) {
+        const session = await tx.cajaSession.findFirst({
+          where: { id: input.cajaSessionId, storeId: input.storeId, status: 'OPEN' },
+        });
+        if (!session) {
+          throw ApiError.badRequest(
+            'La sesión de caja no es válida o no está abierta',
+            'CAJA_SESSION_INVALID'
+          );
+        }
+      } else {
+        const active = await tx.cajaSession.findFirst({
+          where: {
+            storeId: input.storeId,
+            status: 'OPEN',
+            OR: [
+              { userId: input.userId },
+              { caja: { assignedUserId: input.userId } },
+            ],
+          },
+          orderBy: { openedAt: 'desc' },
+        });
+        if (!active) {
+          throw ApiError.badRequest(
+            'Debe abrir la caja antes de registrar ventas',
+            'CAJA_SESSION_REQUIRED'
+          );
+        }
+        input.cajaSessionId = active.id;
       }
     }
 
