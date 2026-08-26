@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma';
 import { Prisma, MovementTipo, PaymentMethod } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
-import { colombiaStartOfDay, colombiaEndOfDay } from '../utils/dates';
+import { mexicoStartOfDay, mexicoEndOfDay } from '../utils/dates';
 import { SupplierTxItemInput } from '../types';
 import { createPurchaseMovementsInTx } from './stockMovement.service';
 
@@ -196,8 +196,8 @@ export async function listStoreTransactions(
   const where: Prisma.SupplierTransactionWhereInput = { storeId };
   if (filters.startDate || filters.endDate) {
     const createdAt: Prisma.DateTimeFilter = {};
-    if (filters.startDate) createdAt.gte = colombiaStartOfDay(filters.startDate);
-    if (filters.endDate) createdAt.lte = colombiaEndOfDay(filters.endDate);
+    if (filters.startDate) createdAt.gte = mexicoStartOfDay(filters.startDate);
+    if (filters.endDate) createdAt.lte = mexicoEndOfDay(filters.endDate);
     where.createdAt = createdAt;
   }
 

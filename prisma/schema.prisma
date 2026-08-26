@@ -580,7 +580,7 @@ model CajaSession {
 
   // Apertura
   openedAt           DateTime @default(now())
-  openingDate        String?  // fecha local Colombia (yyyy-mm-dd) para filtrar por día
+  openingDate        String?  // fecha local MExico (yyyy-mm-dd) para filtrar por día
   openingCash        Decimal  @db.Decimal(12, 2) @default(0)
   openingElectronic  Decimal  @db.Decimal(12, 2) @default(0)
   openingNote        String?
@@ -588,7 +588,7 @@ model CajaSession {
 
   // Cierre (declarado por el operador)
   closedAt           DateTime?
-  closingDate        String? // fecha local Colombia (yyyy-mm-dd) del cierre
+  closingDate        String? // fecha local Mexico (yyyy-mm-dd) del cierre
   closedBy           String?
   closingCash        Decimal? @db.Decimal(12, 2)
   closingElectronic  Decimal? @db.Decimal(12, 2)

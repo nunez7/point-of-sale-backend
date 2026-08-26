@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma';
 import { Prisma } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
-import { colombiaStartOfDay, colombiaEndOfDay } from '../utils/dates';
+import { mexicoStartOfDay, mexicoEndOfDay } from '../utils/dates';
 
 type Tx = Prisma.TransactionClient;
 
@@ -181,8 +181,8 @@ export async function listarFacturas(storeId: string, filtros?: FacturaFiltros) 
 
   if (filtros?.startDate || filtros?.endDate) {
     const createdAt: Record<string, Date> = {};
-    if (filtros.startDate) createdAt.gte = colombiaStartOfDay(filtros.startDate);
-    if (filtros.endDate) createdAt.lte = colombiaEndOfDay(filtros.endDate);
+    if (filtros.startDate) createdAt.gte = mexicoStartOfDay(filtros.startDate);
+    if (filtros.endDate) createdAt.lte = mexicoEndOfDay(filtros.endDate);
     if (Object.keys(createdAt).length) where.createdAt = createdAt;
   }
 

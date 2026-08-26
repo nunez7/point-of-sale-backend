@@ -2,7 +2,7 @@ import { prisma } from '../config/prisma';
 import { Prisma, PaymentMethod } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 import { SaleItemInput } from '../types';
-import { colombiaStartOfDay, colombiaEndOfDay } from '../utils/dates';
+import { mexicoStartOfDay, mexicoEndOfDay } from '../utils/dates';
 
 export interface CreateSaleInput {
   storeId: string;
@@ -317,8 +317,8 @@ export async function listSales(filters: {
 
   if (filters.startDate || filters.endDate) {
     const createdAt: Record<string, Date> = {};
-    if (filters.startDate) createdAt.gte = colombiaStartOfDay(filters.startDate);
-    if (filters.endDate) createdAt.lte = colombiaEndOfDay(filters.endDate);
+    if (filters.startDate) createdAt.gte = mexicoStartOfDay(filters.startDate);
+    if (filters.endDate) createdAt.lte = mexicoEndOfDay(filters.endDate);
     if (Object.keys(createdAt).length) where.createdAt = createdAt;
   }
 
@@ -562,8 +562,8 @@ export async function listOrders(filters: {
 
   if (filters.startDate || filters.endDate) {
     const createdAt: Record<string, Date> = {};
-    if (filters.startDate) createdAt.gte = colombiaStartOfDay(filters.startDate);
-    if (filters.endDate) createdAt.lte = colombiaEndOfDay(filters.endDate);
+    if (filters.startDate) createdAt.gte = mexicoStartOfDay(filters.startDate);
+    if (filters.endDate) createdAt.lte = mexicoEndOfDay(filters.endDate);
     if (Object.keys(createdAt).length) where.createdAt = createdAt;
   }
 

@@ -2,10 +2,10 @@ import { prisma } from '../config/prisma';
 import { Prisma } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 import {
-  colombiaStartOfDay,
-  colombiaEndOfDay,
-  colombiaLocalDateKey,
-  COLOMBIA_OFFSET_MS,
+  mexicoStartOfDay,
+  mexicoEndOfDay,
+  mexicoLocalDateKey,
+  MEXICO_OFFSET_MS,
 } from '../utils/dates';
 import { getInventoryReport } from './stockMovement.service';
 
@@ -68,7 +68,7 @@ export async function dailyReport(storeId: string, date?: string) {
     where: {
       storeId,
       status: 'COMPLETED',
-      createdAt: { gte: colombiaStartOfDay(date), lte: colombiaEndOfDay(date) },
+      createdAt: { gte: mexicoStartOfDay(date), lte: mexicoEndOfDay(date) },
     },
     select: { id: true, total: true, profit: true, paymentMethod: true, createdAt: true },
   });
@@ -79,8 +79,8 @@ export async function dailyReport(storeId: string, date?: string) {
 
   const adj = await partialSaleCancellationAdjustment(
     storeId,
-    colombiaStartOfDay(date),
-    colombiaEndOfDay(date)
+    mexicoStartOfDay(date),
+    mexicoEndOfDay(date)
   );
   const totalRevenue = Math.max(0, totalSales - adj.revenue);
   const totalProfit = Math.max(0, totalProfitBruta - adj.profit);
@@ -95,7 +95,7 @@ export async function dailyReport(storeId: string, date?: string) {
 
   return {
     storeId,
-    date: colombiaStartOfDay(date).toISOString().slice(0, 10),
+    date: mexicoStartOfDay(date).toISOString().slice(0, 10),
     salesCount: count,
     totalRevenue,
     totalProfit,
@@ -119,7 +119,7 @@ export async function monthlyReport(storeId: string, month?: string) {
       throw ApiError.badRequest('Mes inválido', 'INVALID_DATE');
     }
   } else {
-    const now = new Date(Date.now() + COLOMBIA_OFFSET_MS);
+    const now = new Date(Date.now() + MEXICO_OFFSET_MS);
     year = now.getUTCFullYear();
     monthIdx = now.getUTCMonth();
   }
@@ -132,7 +132,7 @@ export async function monthlyReport(storeId: string, month?: string) {
     where: {
       storeId,
       status: 'COMPLETED',
-      createdAt: { gte: colombiaStartOfDay(firstKey), lte: colombiaEndOfDay(lastKey) },
+      createdAt: { gte: mexicoStartOfDay(firstKey), lte: mexicoEndOfDay(lastKey) },
     },
     select: { createdAt: true, total: true, profit: true },
   });
@@ -142,7 +142,7 @@ export async function monthlyReport(storeId: string, month?: string) {
     { salesCount: number; totalRevenue: number; totalProfit: number }
   >();
   for (const sale of sales) {
-    const dayKey = colombiaLocalDateKey(sale.createdAt);
+    const dayKey = mexicoLocalDateKey(sale.createdAt);
     const entry = perDay.get(dayKey) ?? { salesCount: 0, totalRevenue: 0, totalProfit: 0 };
     entry.salesCount += 1;
     entry.totalRevenue += Number(sale.total);
@@ -156,12 +156,12 @@ export async function monthlyReport(storeId: string, month?: string) {
       storeId,
       entityType: 'SALE',
       type: 'PARTIAL',
-      createdAt: { gte: colombiaStartOfDay(firstKey), lte: colombiaEndOfDay(lastKey) },
+      createdAt: { gte: mexicoStartOfDay(firstKey), lte: mexicoEndOfDay(lastKey) },
     },
     select: { createdAt: true, total: true, items: { select: { profit: true } } },
   });
   for (const c of cancelacionesParciales) {
-    const dayKey = colombiaLocalDateKey(c.createdAt);
+    const dayKey = mexicoLocalDateKey(c.createdAt);
     const entry = perDay.get(dayKey);
     if (entry) {
       const rev = Number(c.total);
@@ -191,10 +191,16 @@ export async function corteCaja(
 ) {
   await validateStore(storeId);
 
-  // Anclar a día de Colombia: el rango [desde, hasta] cubre el día calendario
-  // completo de Colombia sin importar la zona horaria del servidor.
-  const desde = startDate ? colombiaStartOfDay(startDate) : colombiaStartOfDay(date);
-  const hasta = endDate ? colombiaEndOfDay(endDate) : colombiaEndOfDay(date);
+  const storeCfg = await prisma.store.findUnique({
+    where: { id: storeId },
+    select: { controlCajas: true },
+  });
+  const controlCajas = storeCfg?.controlCajas ?? false;
+
+  // Anclar a día de México: el rango [desde, hasta] cubre el día calendario
+  // completo de México sin importar la zona horaria del servidor.
+  const desde = startDate ? mexicoStartOfDay(startDate) : mexicoStartOfDay(date);
+  const hasta = endDate ? mexicoEndOfDay(endDate) : mexicoEndOfDay(date);
 
   const whereSale: Prisma.SaleWhereInput = {
     storeId,
@@ -255,7 +261,74 @@ export async function corteCaja(
     e.total += saleNetTotal.get(s.id) ?? 0;
     salesByPayment[key] = e;
   }
-  const cashExpected = cashExpectedNeto;
+
+  // Cuando la tienda usa control de cajas, el "Efectivo esperado en caja"
+  // debe reflejar el dinero real del cajón, no solo lo vendido:
+  //   apertura + ventas en efectivo netas + ingresos de caja
+  //   - egresos de caja - compras pagadas de caja.
+  let aperturaEfectivo = 0;
+  let aperturaElectronico = 0;
+  let movimientosEfectivoIngreso = 0;
+  let movimientosEfectivoEgreso = 0;
+  let comprasCajaEfectivo = 0;
+
+  let cashExpected: number;
+  if (controlCajas) {
+    const openingDateDesde = startDate ?? date ?? '';
+    const openingDateHasta = endDate ?? date ?? '';
+
+    const sesiones = await prisma.cajaSession.findMany({
+      where: {
+        storeId,
+        openingDate: { gte: openingDateDesde, lte: openingDateHasta },
+        ...(operatorId ? { userId: operatorId } : {}),
+      },
+      select: { openingCash: true, openingElectronic: true },
+    });
+    for (const s of sesiones) {
+      aperturaEfectivo += Number(s.openingCash);
+      aperturaElectronico += Number(s.openingElectronic);
+    }
+
+    const movimientos = await prisma.cajaMovimiento.findMany({
+      where: {
+        storeId,
+        createdAt: { gte: desde, lte: hasta },
+        ...(operatorId ? { userId: operatorId } : {}),
+      },
+      select: { tipo: true, metodo: true, monto: true },
+    });
+    for (const m of movimientos) {
+      if (m.metodo !== 'CASH') continue;
+      if (m.tipo === 'INGRESO') movimientosEfectivoIngreso += Number(m.monto);
+      else if (m.tipo === 'EGRESO') movimientosEfectivoEgreso += Number(m.monto);
+    }
+
+    const compras = await prisma.supplierTransaction.findMany({
+      where: {
+        storeId,
+        paidFrom: 'CAJA',
+        paymentMethod: 'CASH',
+        canceledAt: null,
+        createdAt: { gte: desde, lte: hasta },
+        ...(operatorId ? { userId: operatorId } : {}),
+      },
+      select: { total: true },
+    });
+    for (const c of compras) comprasCajaEfectivo += Number(c.total);
+
+    const ventasEfectivoNet = salesByPayment['CASH']?.total ?? 0;
+    cashExpected = Math.max(
+      0,
+      aperturaEfectivo +
+        ventasEfectivoNet +
+        movimientosEfectivoIngreso -
+        movimientosEfectivoEgreso -
+        comprasCajaEfectivo
+    );
+  } else {
+    cashExpected = cashExpectedNeto;
+  }
 
   const cancelaciones = await prisma.cancellation.findMany({
     where: { storeId, createdAt: { gte: desde, lte: hasta } },
@@ -286,9 +359,9 @@ export async function corteCaja(
 
   const inventario = await getInventoryReport(storeId, startDate ?? date);
 
-  const fechaRef = startDate ?? date ?? colombiaLocalDateKey(new Date());
+  const fechaRef = startDate ?? date ?? mexicoLocalDateKey(new Date());
 
-  const esDiaUnico = colombiaLocalDateKey(desde) === colombiaLocalDateKey(hasta);
+  const esDiaUnico = mexicoLocalDateKey(desde) === mexicoLocalDateKey(hasta);
 
   const byHour: { hour: number; count: number; totalRevenue: number }[] = [];
   const byDay: { date: string; count: number; totalRevenue: number }[] = [];
@@ -296,7 +369,7 @@ export async function corteCaja(
   if (esDiaUnico) {
     const porHora = new Map<number, { count: number; total: number }>();
     for (const s of sales) {
-      const hora = new Date(s.createdAt.getTime() + COLOMBIA_OFFSET_MS).getUTCHours();
+      const hora = new Date(s.createdAt.getTime() + MEXICO_OFFSET_MS).getUTCHours();
       const e = porHora.get(hora) ?? { count: 0, total: 0 };
       e.count += 1;
       e.total += saleNetTotal.get(s.id) ?? 0;
@@ -309,7 +382,7 @@ export async function corteCaja(
   } else {
     const porDia = new Map<string, { count: number; total: number }>();
     for (const s of sales) {
-      const dk = colombiaLocalDateKey(s.createdAt);
+      const dk = mexicoLocalDateKey(s.createdAt);
       const e = porDia.get(dk) ?? { count: 0, total: 0 };
       e.count += 1;
       e.total += saleNetTotal.get(s.id) ?? 0;
@@ -332,6 +405,12 @@ export async function corteCaja(
     totalProfit,
     averageTicket,
     cashExpected,
+    controlCajas,
+    aperturaEfectivo,
+    aperturaElectronico,
+    movimientosEfectivoIngreso,
+    movimientosEfectivoEgreso,
+    comprasCajaEfectivo,
     salesByPayment,
     byHour,
     byDay,
@@ -501,14 +580,13 @@ export async function cierreCaja(
   if (filtros.cajaId) where.cajaId = filtros.cajaId;
   if (filtros.userId) where.userId = filtros.userId;
 
+  // Filtra por el timestamp openedAt usando el día de México completo (desde
+  // la medianoche hasta el último milisegundo del día), de modo que una sesión
+  // abierta cualquier hora de "fin" quede incluida sin tener que sumar un día.
   if (filtros.startDate || filtros.endDate) {
     const openedAt: Prisma.DateTimeFilter = {};
-    if (filtros.startDate) openedAt.gte = colombiaStartOfDay(filtros.startDate);
-    if (filtros.endDate) {
-      const end = colombiaStartOfDay(filtros.endDate);
-      end.setHours(23, 59, 59, 999);
-      openedAt.lte = end;
-    }
+    if (filtros.startDate) openedAt.gte = mexicoStartOfDay(filtros.startDate);
+    if (filtros.endDate) openedAt.lte = mexicoEndOfDay(filtros.endDate);
     where.openedAt = openedAt;
   }
 
@@ -518,7 +596,7 @@ export async function cierreCaja(
       caja: { select: { id: true, name: true } },
       user: { select: { id: true, name: true } },
     },
-    orderBy: [{ openingDate: 'asc' }, { caja: { name: 'asc' } }, { openedAt: 'asc' }],
+    orderBy: [{ openingDate: 'asc' }, { openedAt: 'asc' }],
   });
 
   const sessionIds = sessions.map((s) => s.id);

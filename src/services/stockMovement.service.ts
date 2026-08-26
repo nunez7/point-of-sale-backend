@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma';
 import { MovementTipo, Prisma } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
-import { colombiaStartOfDay, colombiaEndOfDay } from '../utils/dates';
+import { mexicoStartOfDay, mexicoEndOfDay } from '../utils/dates';
 
 export interface CreateMovementInput {
   storeId: string;
@@ -15,11 +15,11 @@ export interface CreateMovementInput {
 }
 
 function startOfDay(dateStr?: string): Date {
-  return colombiaStartOfDay(dateStr);
+  return mexicoStartOfDay(dateStr);
 }
 
 function endOfDay(dateStr?: string): Date {
-  return colombiaEndOfDay(dateStr);
+  return mexicoEndOfDay(dateStr);
 }
 
 // Aplica el delta de stock al inventario de forma atómica y devuelve

@@ -2,7 +2,7 @@ import { prisma } from '../config/prisma';
 import { Prisma, Role, PaymentMethod } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 import { audit } from '../utils/audit';
-import { colombiaStartOfDay, colombiaLocalDateKey } from '../utils/dates';
+import { mexicoStartOfDay, mexicoLocalDateKey } from '../utils/dates';
 import { registerOpening } from './stockMovement.service';
 import { resumenMovimientos } from './cajaMovimiento.service';
 
@@ -70,10 +70,18 @@ export async function openCaja(
     );
   }
 
+  // Debe registrar fondo de apertura en al menos un medio de pago.
+  if ((data.openingCash ?? 0) <= 0 && (data.openingElectronic ?? 0) <= 0) {
+    throw ApiError.badRequest(
+      'Debe registrar dinero de apertura (efectivo o electrónico) para abrir la caja',
+      'CAJA_APERTURA_SIN_FONDOS'
+    );
+  }
+
   // Una misma caja solo puede tener una sesión por día. Si ya existe una sesión
   // (abierta o cerrada) para el día de hoy, no se crea una nueva: para volver a
   // operar la caja del día debe reabrirse desde el menú Cajas (ADMIN/GERENTE).
-  const hoy = colombiaLocalDateKey(new Date());
+  const hoy = mexicoLocalDateKey(new Date());
   const sesionHoy = await prisma.cajaSession.findFirst({
     where: { cajaId, storeId, openingDate: hoy },
   });
@@ -100,7 +108,7 @@ export async function openCaja(
       cajaId,
       userId,
       openedAt,
-      openingDate: colombiaLocalDateKey(openedAt),
+      openingDate: mexicoLocalDateKey(openedAt),
       openingCash: new Prisma.Decimal(data.openingCash),
       openingElectronic: new Prisma.Decimal(data.openingElectronic),
       openingNote: data.openingNote ?? null,
@@ -260,7 +268,7 @@ export async function closeCaja(
     data: {
       status: 'CLOSED',
       closedAt,
-      closingDate: colombiaLocalDateKey(closedAt),
+      closingDate: mexicoLocalDateKey(closedAt),
       closedBy: userId,
       closingCash,
       closingElectronic,
@@ -320,7 +328,7 @@ export async function reopenCaja(
     throw ApiError.badRequest('La caja ya está abierta', 'CAJA_YA_ABIERTA');
   }
 
-  const hoy = colombiaLocalDateKey(new Date());
+  const hoy = mexicoLocalDateKey(new Date());
   if (session.openingDate !== hoy) {
     throw ApiError.badRequest(
       'Solo se puede reabrir una sesión cerrada del día de hoy',
@@ -400,9 +408,9 @@ export async function listSessions(storeId: string, filters: SessionFilters = {}
 
   if (filters.startDate || filters.endDate) {
     const openedAt: Prisma.DateTimeFilter = {};
-    if (filters.startDate) openedAt.gte = colombiaStartOfDay(filters.startDate);
+    if (filters.startDate) openedAt.gte = mexicoStartOfDay(filters.startDate);
     if (filters.endDate) {
-      const end = colombiaStartOfDay(filters.endDate);
+      const end = mexicoStartOfDay(filters.endDate);
       end.setHours(23, 59, 59, 999);
       openedAt.lte = end;
     }
@@ -432,7 +440,7 @@ export async function getSessionReport(sessionId: string, storeId: string) {
   });
   if (!session) throw ApiError.notFound('Sesión de caja no encontrada', 'CAJA_SESSION_NOT_FOUND');
 
-  const desde = colombiaStartOfDay(colombiaLocalDateKey(session.openedAt));
+  const desde = mexicoStartOfDay(mexicoLocalDateKey(session.openedAt));
   const hasta = session.closedAt ?? new Date();
 
   const sales = await prisma.sale.findMany({
