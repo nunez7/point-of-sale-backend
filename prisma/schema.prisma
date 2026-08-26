@@ -104,6 +104,7 @@ model Store {
   inventorySnapshots InventorySnapshot[]
   cajas           Caja[]
   cajaSessions    CajaSession[]
+  cajaMovimientos CajaMovimiento[]
 }
 
 model User {
@@ -128,6 +129,7 @@ model User {
   stockMovements   StockMovement[]
   cajasAsignadas   Caja[]            @relation("CajaUser")
   cajaSessions     CajaSession[]
+  cajaMovimientos  CajaMovimiento[]
   @@index([storeId])
 }
 
@@ -602,11 +604,39 @@ model CajaSession {
   diffCash            Decimal? @db.Decimal(12, 2)
   diffElectronic      Decimal? @db.Decimal(12, 2)
 
-  sales      Sale[]
-  supplierTxs SupplierTransaction[]
+  // Reapertura (solo ADMIN/GERENTE, con motivo; el evento queda en AuditLog)
+  reopenedAt   DateTime?
+  reopenedBy   String?
+  reopenReason String?
+
+  sales        Sale[]
+  supplierTxs  SupplierTransaction[]
+  movimientos  CajaMovimiento[]
 
   @@index([storeId, status])
   @@index([storeId, openingDate])
   @@index([cajaId])
+  @@index([userId])
+}
+
+// Movimiento de dinero registrado sobre una sesión abierta de caja: ingreso
+// (feria, fondo) o egreso (retiro de margen). Afecta el corte esperado de la
+// sesión según su método (efectivo o electrónico).
+model CajaMovimiento {
+  id            String   @id @default(uuid())
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  cajaSessionId String
+  session       CajaSession @relation(fields: [cajaSessionId], references: [id], onDelete: Cascade)
+  userId        String // quien registró el movimiento
+  user          User     @relation(fields: [userId], references: [id])
+  tipo          String // INGRESO | EGRESO
+  metodo        String   @default("CASH") // CASH | ELECTRONIC
+  monto         Decimal  @db.Decimal(12, 2)
+  motivo        String
+  createdAt     DateTime @default(now())
+
+  @@index([storeId])
+  @@index([cajaSessionId])
   @@index([userId])
 }

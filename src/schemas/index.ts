@@ -512,3 +512,29 @@ export const cajaSessionQuerySchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
     .optional(),
 });
+
+export const cajaMovimientoSchema = z.object({
+  tipo: z.enum(['INGRESO', 'EGRESO'], {
+    errorMap: () => ({ message: 'El tipo debe ser INGRESO o EGRESO' }),
+  }),
+  metodo: z.enum(['CASH', 'ELECTRONIC']).default('CASH'),
+  monto: z.number().positive('El monto debe ser mayor a cero'),
+  motivo: z.string().min(1, 'El motivo es requerido').max(500, 'Máximo 500 caracteres'),
+});
+
+export const cajaReopenSchema = z.object({
+  motivo: z.string().min(1, 'El motivo de reapertura es requerido').max(500, 'Máximo 500 caracteres'),
+});
+
+export const cierreCajaQuerySchema = z.object({
+  cajaId: z.string().optional(),
+  userId: z.string().optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha inicial debe tener formato YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
+    .optional(),
+});

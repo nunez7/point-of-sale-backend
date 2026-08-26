@@ -3,6 +3,22 @@ import { asyncAuthHandler, asyncHandler } from '../utils/asyncHandler';
 import * as reportService from '../services/report.service';
 import type { AuthedRequest } from '../types';
 
+export const cierreCaja = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const { cajaId, userId, startDate, endDate } = req.query as {
+    cajaId?: string;
+    userId?: string;
+    startDate?: string;
+    endDate?: string;
+  };
+  const result = await reportService.cierreCaja(req.user!.storeId, {
+    cajaId,
+    userId,
+    startDate,
+    endDate,
+  });
+  res.json(result);
+});
+
 export const dailyReport = asyncHandler(async (req, res: Response) => {
   const { storeId, date } = req.query as { storeId: string; date?: string };
   const result = await reportService.dailyReport(storeId, date);

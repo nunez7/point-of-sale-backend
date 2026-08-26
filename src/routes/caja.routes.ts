@@ -8,17 +8,24 @@ import {
 import {
   openCaja,
   closeCaja,
+  reopenCaja,
   getActiveSession,
   listSessions,
   getSessionReport,
   getSessionPreview,
 } from '../controllers/cajaSession.controller';
 import {
+  crearMovimiento,
+  listarMovimientos,
+} from '../controllers/cajaMovimiento.controller';
+import {
   idParamSchema,
   cajaSchema,
   cajaUpdateSchema,
   cajaOpenSchema,
   cajaCloseSchema,
+  cajaMovimientoSchema,
+  cajaReopenSchema,
   cajaSessionQuerySchema,
 } from '../schemas';
 import { validate } from '../middleware/validate';
@@ -71,6 +78,14 @@ router.post(
   validate(cajaCloseSchema),
   closeCaja
 );
+router.post(
+  '/sessions/:id/reopen',
+  requireAuth,
+  requireRole(Role.ADMIN, Role.GERENTE),
+  validate(idParamSchema, 'params'),
+  validate(cajaReopenSchema),
+  reopenCaja
+);
 router.get(
   '/sessions',
   requireAuth,
@@ -88,6 +103,20 @@ router.get(
   requireAuth,
   validate(idParamSchema, 'params'),
   getSessionReport
+);
+router.get(
+  '/sessions/:id/movimientos',
+  requireAuth,
+  validate(idParamSchema, 'params'),
+  listarMovimientos
+);
+router.post(
+  '/sessions/:id/movimientos',
+  requireAuth,
+  requireRole(Role.ADMIN, Role.GERENTE),
+  validate(idParamSchema, 'params'),
+  validate(cajaMovimientoSchema),
+  crearMovimiento
 );
 
 export default router;

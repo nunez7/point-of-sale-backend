@@ -1,0 +1,12 @@
+Datasource "db": PostgreSQL database "punto-venta", schema "public" at "localhost:5432"
+
+Applying migration `20260826193212_caja_movimientos_y_reapertura`
+
+The following migration(s) have been created and applied from new schema changes:
+
+prisma\migrations/
+  └─ 20260826193212_caja_movimientos_y_reapertura/
+    └─ migration.sql
+
+Your database is now in sync with your schema.
+

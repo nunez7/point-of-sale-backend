@@ -4,6 +4,7 @@ import * as cajaSessionService from '../services/cajaSession.service';
 import { ApiError } from '../utils/ApiError';
 import { AuthedRequest } from '../types';
 import { Role } from '../../generated/prisma/client.js';
+import { emitToStore } from '../socket/socket';
 
 export const openCaja = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
   const storeId = req.user!.storeId;
@@ -17,6 +18,7 @@ export const openCaja = asyncAuthHandler(async (req: AuthedRequest, res: Respons
     openingElectronic: req.body.openingElectronic,
     openingNote: req.body.openingNote ?? null,
   });
+  emitToStore(storeId, 'caja:updated', { sessionId: session.id, type: 'apertura' });
   res.status(201).json({ session });
 });
 
@@ -25,13 +27,32 @@ export const closeCaja = asyncAuthHandler(async (req: AuthedRequest, res: Respon
   const userId = req.user!.id;
   const role = req.user!.role as Role;
   const sessionId = req.params.id;
-  if (!sessionId) throw ApiError.badRequest('El id de la sesión es requerido', 'BAD_REQUEST');
+  if (!sessionId) throw ApiError.badRequest('El id de la sesi��n es requerido', 'BAD_REQUEST');
 
   const session = await cajaSessionService.closeCaja(sessionId, storeId, userId, role, {
     closingCash: req.body.closingCash,
     closingElectronic: req.body.closingElectronic,
     closingNote: req.body.closingNote ?? null,
   });
+  emitToStore(storeId, 'caja:updated', { sessionId, type: 'cierre' });
+  res.json({ session });
+});
+
+export const reopenCaja = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const storeId = req.user!.storeId;
+  const userId = req.user!.id;
+  const role = req.user!.role as Role;
+  const sessionId = req.params.id;
+  if (!sessionId) throw ApiError.badRequest('El id de la sesi��n es requerido', 'BAD_REQUEST');
+
+  const session = await cajaSessionService.reopenCaja(
+    sessionId,
+    storeId,
+    userId,
+    role,
+    req.body.motivo
+  );
+  emitToStore(storeId, 'caja:updated', { sessionId, type: 'reapertura' });
   res.json({ session });
 });
 

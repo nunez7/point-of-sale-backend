@@ -4,6 +4,7 @@ import { ApiError } from '../utils/ApiError';
 import { audit } from '../utils/audit';
 import { colombiaStartOfDay, colombiaLocalDateKey } from '../utils/dates';
 import { registerOpening } from './stockMovement.service';
+import { resumenMovimientos } from './cajaMovimiento.service';
 
 // Métodos de pago que cuentan como "electrónico" en el corte de caja.
 const ELECTRONIC_METHODS: PaymentMethod[] = [
@@ -66,6 +67,20 @@ export async function openCaja(
     throw ApiError.badRequest(
       'Esta caja ya tiene una sesión abierta',
       'CAJA_YA_ABIERTA'
+    );
+  }
+
+  // Una misma caja solo puede tener una sesión por día. Si ya existe una sesión
+  // (abierta o cerrada) para el día de hoy, no se crea una nueva: para volver a
+  // operar la caja del día debe reabrirse desde el menú Cajas (ADMIN/GERENTE).
+  const hoy = colombiaLocalDateKey(new Date());
+  const sesionHoy = await prisma.cajaSession.findFirst({
+    where: { cajaId, storeId, openingDate: hoy },
+  });
+  if (sesionHoy) {
+    throw ApiError.badRequest(
+      'Esta caja ya tiene una sesión registrada hoy. Para reabrirla usa el menú Cajas (ADMIN/GERENTE).',
+      'CAJA_YA_TIENE_SESION_HOY'
     );
   }
 
@@ -144,16 +159,35 @@ export async function calcularCorte(
   const openingCash = new Prisma.Decimal(session.openingCash);
   const openingElectronic = new Prisma.Decimal(session.openingElectronic);
 
+  // Movimientos manuales de caja (ingreso/egreso) registrados en la sesión.
+  const mov = await resumenMovimientos(session.id, storeId);
+  const ingresoCash = mov.ingresoCash;
+  const egresoCash = mov.egresoCash;
+  const ingresoElectronic = mov.ingresoElectronic;
+  const egresoElectronic = mov.egresoElectronic;
+
   // Solo las compras pagadas con dinero de caja (paidFrom = "CAJA") descuentan
   // del corte; las pagadas con efectivo de dueño no afectan el corte.
-  const expectedCash = openingCash.plus(salesCash).minus(purchasesCash);
-  const expectedElectronic = openingElectronic.plus(salesElectronic).minus(purchasesElectronic);
+  const expectedCash = openingCash
+    .plus(salesCash)
+    .minus(purchasesCash)
+    .plus(ingresoCash)
+    .minus(egresoCash);
+  const expectedElectronic = openingElectronic
+    .plus(salesElectronic)
+    .minus(purchasesElectronic)
+    .plus(ingresoElectronic)
+    .minus(egresoElectronic);
 
   return {
     salesCash,
     salesElectronic,
     purchasesCash,
     purchasesElectronic,
+    ingresoCash,
+    egresoCash,
+    ingresoElectronic,
+    egresoElectronic,
     expectedCash,
     expectedElectronic,
   };
@@ -259,6 +293,76 @@ export async function closeCaja(
   });
 
   return closed;
+}
+
+// Reabre una sesión ya cerrada del día (solo ADMIN/GERENTE, con motivo
+// obligatorio). El evento queda registrado en AuditLog como histórico.
+export async function reopenCaja(
+  sessionId: string,
+  storeId: string,
+  userId: string,
+  role: string,
+  motivo: string
+) {
+  if (role === Role.VENDEDOR) {
+    throw ApiError.forbidden(
+      'Solo un administrador o gerente puede reabrir la caja',
+      'CAJA_REOPEN_FORBIDDEN'
+    );
+  }
+
+  const session = await prisma.cajaSession.findFirst({
+    where: { id: sessionId, storeId },
+    include: { caja: true },
+  });
+  if (!session) throw ApiError.notFound('Sesión de caja no encontrada', 'CAJA_SESSION_NOT_FOUND');
+  if (session.status !== 'CLOSED') {
+    throw ApiError.badRequest('La caja ya está abierta', 'CAJA_YA_ABIERTA');
+  }
+
+  const hoy = colombiaLocalDateKey(new Date());
+  if (session.openingDate !== hoy) {
+    throw ApiError.badRequest(
+      'Solo se puede reabrir una sesión cerrada del día de hoy',
+      'CAJA_REOPEN_OTRO_DIA'
+    );
+  }
+
+  const reopened = await prisma.cajaSession.update({
+    where: { id: session.id },
+    data: {
+      status: 'OPEN',
+      closedAt: null,
+      closingDate: null,
+      closedBy: null,
+      closingCash: null,
+      closingElectronic: null,
+      closingNote: null,
+      salesCash: null,
+      salesElectronic: null,
+      purchasesCash: null,
+      purchasesElectronic: null,
+      expectedCash: null,
+      expectedElectronic: null,
+      diffCash: null,
+      diffElectronic: null,
+      reopenedAt: new Date(),
+      reopenedBy: userId,
+      reopenReason: motivo,
+    },
+    include: sessionInclude,
+  });
+
+  await audit({
+    storeId,
+    userId,
+    action: 'REABRIR_CAJA',
+    entity: 'CajaSession',
+    entityId: session.id,
+    metadata: { cajaId: session.cajaId, motivo },
+  });
+
+  return reopened;
 }
 
 // Sesión activa (abierta) para un usuario: la de su caja asignada, o la

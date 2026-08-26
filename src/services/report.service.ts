@@ -454,3 +454,141 @@ export async function suppliersReport(storeId: string) {
     }))
     .sort((a, b) => b.totalSpent - a.totalSpent);
 }
+
+// Reporte de cierres de caja: una fila por sesión (una por caja/día), con
+// filtros por caja, cajero (usuario) y rango de fechas, ordenado por día.
+export interface CierreCajaFila {
+  id: string;
+  cajaId: string;
+  caja: string;
+  userId: string;
+  cajero: string;
+  status: string;
+  openingDate: string | null;
+  openedAt: string;
+  closedAt: string | null;
+  openingCash: number;
+  openingElectronic: number;
+  salesCash: number | null;
+  salesElectronic: number | null;
+  purchasesCash: number | null;
+  purchasesElectronic: number | null;
+  ingresoCash: number;
+  egresoCash: number;
+  ingresoElectronic: number;
+  egresoElectronic: number;
+  expectedCash: number | null;
+  expectedElectronic: number | null;
+  closingCash: number | null;
+  closingElectronic: number | null;
+  diffCash: number | null;
+  diffElectronic: number | null;
+  reopenReason: string | null;
+}
+
+export interface CierreCajaFiltros {
+  cajaId?: string;
+  userId?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+export async function cierreCaja(
+  storeId: string,
+  filtros: CierreCajaFiltros = {}
+): Promise<{ rows: CierreCajaFila[] }> {
+  const where: Prisma.CajaSessionWhereInput = { storeId };
+  if (filtros.cajaId) where.cajaId = filtros.cajaId;
+  if (filtros.userId) where.userId = filtros.userId;
+
+  if (filtros.startDate || filtros.endDate) {
+    const openedAt: Prisma.DateTimeFilter = {};
+    if (filtros.startDate) openedAt.gte = colombiaStartOfDay(filtros.startDate);
+    if (filtros.endDate) {
+      const end = colombiaStartOfDay(filtros.endDate);
+      end.setHours(23, 59, 59, 999);
+      openedAt.lte = end;
+    }
+    where.openedAt = openedAt;
+  }
+
+  const sessions = await prisma.cajaSession.findMany({
+    where,
+    include: {
+      caja: { select: { id: true, name: true } },
+      user: { select: { id: true, name: true } },
+    },
+    orderBy: [{ openingDate: 'asc' }, { caja: { name: 'asc' } }, { openedAt: 'asc' }],
+  });
+
+  const sessionIds = sessions.map((s) => s.id);
+  const movGroups = sessionIds.length
+    ? await prisma.cajaMovimiento.groupBy({
+        by: ['cajaSessionId', 'tipo', 'metodo'],
+        where: { cajaSessionId: { in: sessionIds }, storeId },
+        _sum: { monto: true },
+      })
+    : [];
+
+  const movMap = new Map<
+    string,
+    { ingresoCash: number; egresoCash: number; ingresoElectronic: number; egresoElectronic: number }
+  >();
+  for (const g of movGroups) {
+    const id = g.cajaSessionId;
+    const entry = movMap.get(id) ?? {
+      ingresoCash: 0,
+      egresoCash: 0,
+      ingresoElectronic: 0,
+      egresoElectronic: 0,
+    };
+    const monto = Number(g._sum.monto ?? 0);
+    if (g.tipo === 'INGRESO') {
+      if (g.metodo === 'CASH') entry.ingresoCash += monto;
+      else entry.ingresoElectronic += monto;
+    } else {
+      if (g.metodo === 'CASH') entry.egresoCash += monto;
+      else entry.egresoElectronic += monto;
+    }
+    movMap.set(id, entry);
+  }
+
+  const rows: CierreCajaFila[] = sessions.map((s) => {
+    const mov = movMap.get(s.id) ?? {
+      ingresoCash: 0,
+      egresoCash: 0,
+      ingresoElectronic: 0,
+      egresoElectronic: 0,
+    };
+    return {
+      id: s.id,
+      cajaId: s.cajaId,
+      caja: s.caja?.name ?? 'Caja',
+      userId: s.userId,
+      cajero: s.user?.name ?? '—',
+      status: s.status,
+      openingDate: s.openingDate,
+      openedAt: s.openedAt.toISOString(),
+      closedAt: s.closedAt ? s.closedAt.toISOString() : null,
+      openingCash: Number(s.openingCash),
+      openingElectronic: Number(s.openingElectronic),
+      salesCash: s.salesCash != null ? Number(s.salesCash) : null,
+      salesElectronic: s.salesElectronic != null ? Number(s.salesElectronic) : null,
+      purchasesCash: s.purchasesCash != null ? Number(s.purchasesCash) : null,
+      purchasesElectronic: s.purchasesElectronic != null ? Number(s.purchasesElectronic) : null,
+      ingresoCash: mov.ingresoCash,
+      egresoCash: mov.egresoCash,
+      ingresoElectronic: mov.ingresoElectronic,
+      egresoElectronic: mov.egresoElectronic,
+      expectedCash: s.expectedCash != null ? Number(s.expectedCash) : null,
+      expectedElectronic: s.expectedElectronic != null ? Number(s.expectedElectronic) : null,
+      closingCash: s.closingCash != null ? Number(s.closingCash) : null,
+      closingElectronic: s.closingElectronic != null ? Number(s.closingElectronic) : null,
+      diffCash: s.diffCash != null ? Number(s.diffCash) : null,
+      diffElectronic: s.diffElectronic != null ? Number(s.diffElectronic) : null,
+      reopenReason: s.reopenReason ?? null,
+    };
+  });
+
+  return { rows };
+}
