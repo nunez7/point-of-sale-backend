@@ -22,6 +22,7 @@ export const createSale = asyncAuthHandler(async (req: AuthedRequest, res: Respo
     status,
     clienteId,
     notes,
+    cajaSessionId: req.body.cajaSessionId ?? null,
   });
 
   // Los pedidos (PENDING) no descuentan inventario ni generan alertas hasta

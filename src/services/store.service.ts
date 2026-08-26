@@ -12,6 +12,8 @@ export type UpdateStoreInput = {
   codigoPostal?: string | null;
   notifyOutOfStock?: boolean;
   notifyLowStock?: boolean;
+  controlCajas?: boolean;
+  aperturaCajaConInventario?: boolean;
 }
 
 function mapearErrorCodigoDuplicado(error: unknown): unknown {
@@ -63,7 +65,9 @@ export async function updateStore(
            ...(data.codigoPostal !== undefined && { codigoPostal: data.codigoPostal }),
            ...(data.notifyOutOfStock !== undefined && { notifyOutOfStock: data.notifyOutOfStock }),
            ...(data.notifyLowStock !== undefined && { notifyLowStock: data.notifyLowStock }),
-         },
+           ...(data.controlCajas !== undefined && { controlCajas: data.controlCajas }),
+           ...(data.aperturaCajaConInventario !== undefined && { aperturaCajaConInventario: data.aperturaCajaConInventario }),
+          },
       });
 
       await tx.auditLog.create({

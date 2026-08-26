@@ -17,6 +17,7 @@ import facturaRoutes from './routes/factura.routes';
 import cancelRoutes from './routes/cancel.routes';
 import cancellationReasonRoutes from './routes/cancellationReason.routes';
 import inventoryRoutes from './routes/inventory.routes';
+import cajaRoutes from './routes/caja.routes';
 
 export const app = express();
 
@@ -54,6 +55,7 @@ app.use('/api/facturas', facturaRoutes);
 app.use('/api/cancellations', cancelRoutes);
 app.use('/api/cancellation-reasons', cancellationReasonRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/cajas', cajaRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

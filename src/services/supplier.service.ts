@@ -235,6 +235,8 @@ export interface CreateSupplierTxInput {
   userId: string;
   items: SupplierTxItemInput[];
   paymentMethod: string;
+  // Sesión de caja que procesa la compra (corte de caja).
+  cajaSessionId?: string | null;
 }
 
 export async function createSupplierTransaction(input: CreateSupplierTxInput) {
@@ -249,6 +251,18 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
     const store = await tx.store.findUnique({ where: { id: input.storeId } });
     if (!store) {
       throw ApiError.notFound('Tienda no encontrada', 'STORE_NOT_FOUND');
+    }
+
+    if (input.cajaSessionId) {
+      const session = await tx.cajaSession.findFirst({
+        where: { id: input.cajaSessionId, storeId: input.storeId, status: 'OPEN' },
+      });
+      if (!session) {
+        throw ApiError.badRequest(
+          'La sesión de caja no es válida o no está abierta',
+          'CAJA_SESSION_INVALID'
+        );
+      }
     }
 
     let total = new Prisma.Decimal(0);
@@ -311,6 +325,7 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
         reference,
         total,
         paymentMethod: input.paymentMethod as PaymentMethod,
+        ...(input.cajaSessionId ? { cajaSessionId: input.cajaSessionId } : {}),
         items: {
           create: preparedItems.map((it) => ({
             productId: it.productId,

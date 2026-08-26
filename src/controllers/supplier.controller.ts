@@ -65,6 +65,7 @@ export const createSupplierTransaction = asyncAuthHandler(
       userId: req.user!.id,
       items,
       paymentMethod,
+      cajaSessionId: req.body.cajaSessionId ?? null,
     });
 
     // Se excluye el socket de la estación que registró la compra para no

@@ -16,6 +16,8 @@ export interface CreateSaleInput {
   // Pedido: cliente asociado y notas libres (opcionales).
   clienteId?: string | null;
   notes?: string | null;
+  // Sesión de caja que procesa la venta (corte de caja).
+  cajaSessionId?: string | null;
 }
 
 export interface SaleResult {
@@ -53,6 +55,18 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
   return prisma.$transaction(async (tx) => {
     const store = await tx.store.findUnique({ where: { id: input.storeId } });
     if (!store) throw ApiError.notFound('Tienda no encontrada', 'STORE_NOT_FOUND');
+
+    if (input.cajaSessionId) {
+      const session = await tx.cajaSession.findFirst({
+        where: { id: input.cajaSessionId, storeId: input.storeId, status: 'OPEN' },
+      });
+      if (!session) {
+        throw ApiError.badRequest(
+          'La sesión de caja no es válida o no está abierta',
+          'CAJA_SESSION_INVALID'
+        );
+      }
+    }
 
     if (input.discount < 0 || input.discount > 100) {
       throw ApiError.badRequest('El descuento debe estar entre 0 y 100%', 'INVALID_DISCOUNT');
@@ -159,6 +173,7 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
         paymentMethod: input.paymentMethod as PaymentMethod,
         status: isPending ? 'PENDING' : 'COMPLETED',
         ...(input.clienteId ? { clienteId: input.clienteId } : {}),
+        ...(input.cajaSessionId ? { cajaSessionId: input.cajaSessionId } : {}),
         ...(input.notes ? { notes: input.notes } : {}),
         items: {
           create: preparedItems.map((it) => ({

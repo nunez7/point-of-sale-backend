@@ -69,7 +69,7 @@ interface StockMovementRecord {
   storeId: string;
   productId: string;
   product?: { name: string; unidadVenta: string } | null;
-  userId: string;
+  userId: string | null;
   user?: { id: string; name: string } | null;
   reasonId: string;
   reason?: { id: string; name: string; tipo: MovementTipo } | null;

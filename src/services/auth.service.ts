@@ -13,6 +13,39 @@ function signToken(payload: JwtPayload): string {
   });
 }
 
+// Contexto de caja del usuario: caja asignada (si la tienda usa control de
+// cajas), sesión abierta actual y configuración de la tienda. Permite al
+// frontend enlazar la caja automáticamente sin importar el equipo.
+export async function buildCajaContext(userId: string, storeId: string) {
+  const store = await prisma.store.findUnique({
+    where: { id: storeId },
+    select: { controlCajas: true, aperturaCajaConInventario: true },
+  });
+
+  const caja = await prisma.caja.findFirst({
+    where: { assignedUserId: userId, storeId, isActive: true },
+    select: { id: true, name: true },
+  });
+
+  let session: { id: string; cajaId: string; status: string; openedAt: Date } | null = null;
+  if (caja) {
+    const open = await prisma.cajaSession.findFirst({
+      where: { cajaId: caja.id, storeId, status: 'OPEN' },
+      select: { id: true, cajaId: true, status: true, openedAt: true },
+    });
+    if (open) session = open;
+  }
+
+  return {
+    store: {
+      controlCajas: store?.controlCajas ?? false,
+      aperturaCajaConInventario: store?.aperturaCajaConInventario ?? false,
+    },
+    caja,
+    session,
+  };
+}
+
 export async function login(email: string, password: string) {
   const user = await prisma.user.findUnique({
     where: { email },
@@ -61,7 +94,9 @@ export async function login(email: string, password: string) {
     storeId: user.storeId,
   };
 
-  return { token: accessToken, user: publicUser };
+  const cajaContext = await buildCajaContext(user.id, user.storeId);
+
+  return { token: accessToken, user: publicUser, ...cajaContext };
 }
 
 export async function logout(userId: string, token: string): Promise<void> {
@@ -107,7 +142,9 @@ export async function getMe(userId: string) {
     throw ApiError.notFound('Usuario no encontrado', 'USER_NOT_FOUND');
   }
 
-  return user;
+  const cajaContext = await buildCajaContext(userId, user.storeId);
+
+  return { ...user, ...cajaContext };
 }
 
 export async function updateMe(

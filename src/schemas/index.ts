@@ -264,6 +264,8 @@ export const storeUpdateSchema = z
     codigoPostal: codigoPostalSchema.optional().nullable(),
     notifyOutOfStock: z.boolean().optional(),
     notifyLowStock: z.boolean().optional(),
+    controlCajas: z.boolean().optional(),
+    aperturaCajaConInventario: z.boolean().optional(),
   })
   .refine((d) => Object.keys(d).length > 0, {
     message: 'Debe enviar al menos un campo a actualizar',
@@ -472,4 +474,41 @@ export const inventoryQuerySchema = z.object({
   limit: z.string().optional(),
   sortBy: z.enum(['name', 'category', 'quantity', 'lowStockThreshold']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
+});
+
+// ---------- Cajas ----------
+export const cajaSchema = z.object({
+  name: z.string().min(1, 'El nombre de la caja es requerido').max(60, 'Máximo 60 caracteres'),
+  assignedUserId: z.string().min(1).optional().nullable(),
+  isActive: z.boolean().optional(),
+});
+
+export const cajaUpdateSchema = cajaSchema.partial().refine(
+  (d) => Object.keys(d).length > 0,
+  { message: 'Debe enviar al menos un campo a actualizar' }
+);
+
+export const cajaOpenSchema = z.object({
+  openingCash: z.number().min(0, 'El efectivo inicial no puede ser negativo').default(0),
+  openingElectronic: z.number().min(0, 'El saldo electrónico inicial no puede ser negativo').default(0),
+  openingNote: z.string().max(500, 'Máximo 500 caracteres').optional().nullable(),
+});
+
+export const cajaCloseSchema = z.object({
+  closingCash: z.number().min(0, 'El efectivo declarado no puede ser negativo'),
+  closingElectronic: z.number().min(0, 'El saldo electrónico declarado no puede ser negativo'),
+  closingNote: z.string().max(500, 'Máximo 500 caracteres').optional().nullable(),
+});
+
+export const cajaSessionQuerySchema = z.object({
+  cajaId: z.string().optional(),
+  status: z.enum(['OPEN', 'CLOSED']).optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha inicial debe tener formato YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
+    .optional(),
 });

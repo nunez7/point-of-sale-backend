@@ -86,6 +86,20 @@ async function main() {
     });
   }
 
+  // ─── Cajas de ejemplo (módulo de control de cajas, opcional) ──
+  const cajasBase = ['Caja 1', 'Caja 2'];
+  for (const nombre of cajasBase) {
+    await prisma.caja.upsert({
+      where: { storeId_name: { storeId: store.id, name: nombre } },
+      update: {},
+      create: {
+        storeId: store.id,
+        name: nombre,
+        isActive: true,
+      },
+    });
+  }
+
   // ─── Motivos de cancelación (editables luego desde el módulo de cancelaciones) ──
   const motivosCancelacionBase = [
     'Error de facturación',

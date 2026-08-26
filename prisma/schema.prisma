@@ -81,6 +81,9 @@ model Store {
   // Alertas de inventario configurables por el usuario.
   notifyOutOfStock Boolean @default(true)
   notifyLowStock   Boolean @default(true)
+  // Módulo de cajas: control de apertura/cierre diario y asignación de cajas.
+  controlCajas Boolean @default(false)
+  aperturaCajaConInventario Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -99,6 +102,8 @@ model Store {
   movementReasons MovementReason[]
   stockMovements  StockMovement[]
   inventorySnapshots InventorySnapshot[]
+  cajas           Caja[]
+  cajaSessions    CajaSession[]
 }
 
 model User {
@@ -121,6 +126,8 @@ model User {
   facturas         Factura[]
   cancellations    Cancellation[]
   stockMovements   StockMovement[]
+  cajasAsignadas   Caja[]            @relation("CajaUser")
+  cajaSessions     CajaSession[]
   @@index([storeId])
 }
 
@@ -284,6 +291,9 @@ model Sale {
   clienteId   String?
   cliente     Cliente?      @relation(fields: [clienteId], references: [id])
   notes       String?
+  // Sesión de caja que procesó la venta (corte de caja).
+  cajaSessionId String?
+  cajaSession  CajaSession? @relation(fields: [cajaSessionId], references: [id], onDelete: SetNull)
   // Quién y cuándo confirmó el pedido (status PENDING -> COMPLETED).
   confirmedAt DateTime?
   confirmedBy String?
@@ -301,6 +311,7 @@ model Sale {
   @@index([status])
   @@index([clienteId])
   @@index([userId])
+  @@index([cajaSessionId])
 }
 
 model SaleItem {
@@ -360,6 +371,9 @@ model SupplierTransaction {
   reference     String                       @unique
   total         Decimal                      @db.Decimal(12, 2)
   status        String                       @default("COMPLETED")
+  // Sesión de caja que procesó la compra (corte de caja).
+  cajaSessionId String?
+  cajaSession  CajaSession? @relation(fields: [cajaSessionId], references: [id], onDelete: SetNull)
   canceledAt    DateTime?
   canceledBy    String?
   cancellationReasonId  String?
@@ -370,6 +384,7 @@ model SupplierTransaction {
   @@index([storeId, createdAt])
   @@index([supplierId])
   @@index([userId])
+  @@index([cajaSessionId])
 }
 
 model SupplierTransactionItem {
@@ -521,4 +536,70 @@ model CancellationItem {
   @@index([storeId])
   @@index([productId])
   @@index([saleItemId])
+}
+
+// Caja física de la tienda. El admin/gerente las da de alta y opcionalmente
+// las asigna a un vendedor para que inicie sesión "con su caja" desde cualquier
+// equipo. Una misma caja no puede tener dos sesiones abiertas a la vez.
+model Caja {
+  id             String   @id @default(uuid())
+  storeId        String
+  store          Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name           String
+  assignedUserId String?
+  assignedUser   User?    @relation("CajaUser", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sessions       CajaSession[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
+  @@index([assignedUserId])
+}
+
+// Turno de caja: combina la apertura (saldo inicial declarado) y el cierre
+// (saldo declarado + resultados calculados). Si la tienda usa control de cajas
+// con inventario, al abrir se captura el InventorySnapshot del día.
+model CajaSession {
+  id        String   @id @default(uuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  cajaId    String
+  caja      Caja     @relation(fields: [cajaId], references: [id], onDelete: Cascade)
+  userId    String   // operador que abrió la caja
+  user      User     @relation(fields: [userId], references: [id])
+  status    String   @default("OPEN") // OPEN | CLOSED
+
+  // Apertura
+  openedAt           DateTime @default(now())
+  openingCash        Decimal  @db.Decimal(12, 2) @default(0)
+  openingElectronic  Decimal  @db.Decimal(12, 2) @default(0)
+  openingNote        String?
+  inventoryAdjusted  Boolean?
+
+  // Cierre (declarado por el operador)
+  closedAt           DateTime?
+  closedBy           String?
+  closingCash        Decimal? @db.Decimal(12, 2)
+  closingElectronic  Decimal? @db.Decimal(12, 2)
+  closingNote        String?
+
+  // Resultados calculados al cierre
+  salesCash           Decimal? @db.Decimal(12, 2)
+  salesElectronic     Decimal? @db.Decimal(12, 2)
+  purchasesCash       Decimal? @db.Decimal(12, 2)
+  purchasesElectronic Decimal? @db.Decimal(12, 2)
+  expectedCash        Decimal? @db.Decimal(12, 2)
+  expectedElectronic  Decimal? @db.Decimal(12, 2)
+  diffCash            Decimal? @db.Decimal(12, 2)
+  diffElectronic      Decimal? @db.Decimal(12, 2)
+
+  sales      Sale[]
+  supplierTxs SupplierTransaction[]
+
+  @@index([storeId, status])
+  @@index([cajaId])
+  @@index([userId])
 }
