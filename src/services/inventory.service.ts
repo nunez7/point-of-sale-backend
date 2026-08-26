@@ -66,18 +66,26 @@ export async function getInventoryByStore(storeId: string, filters: InventoryFil
 }
 
 export async function getLowStock(storeId: string) {
+  // Filtra en BD (quantity <= lowStockThreshold por fila, no expresable en
+  // Prisma where) para no traer todo el inventario y filtrar en memoria.
+  const candidatos = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id
+    FROM "Inventory"
+    WHERE "storeId" = ${storeId}
+      AND "quantity" <= "lowStockThreshold"
+  `;
+  if (candidatos.length === 0) return [];
+
   const inventories = await prisma.inventory.findMany({
-    where: { storeId },
+    where: { id: { in: candidatos.map((c) => c.id) } },
     include: { product: { include: { category: true } } },
   });
 
-  return inventories
-    .filter((inv) => new Prisma.Decimal(inv.quantity).lessThanOrEqualTo(inv.lowStockThreshold))
-    .map((inv) => ({
-      ...inv,
-      quantity: Number(inv.quantity),
-      lowStock: true,
-    }));
+  return inventories.map((inv) => ({
+    ...inv,
+    quantity: Number(inv.quantity),
+    lowStock: true,
+  }));
 }
 
 export function emitInventoryEvent(storeId: string, data: unknown): void {

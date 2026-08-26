@@ -70,6 +70,7 @@ export async function dailyReport(storeId: string, date?: string) {
       status: 'COMPLETED',
       createdAt: { gte: colombiaStartOfDay(date), lte: colombiaEndOfDay(date) },
     },
+    select: { id: true, total: true, profit: true, paymentMethod: true, createdAt: true },
   });
 
   const totalSales = sales.reduce((sum, s) => sum + Number(s.total), 0);
@@ -346,7 +347,13 @@ export async function corteCaja(
 export async function productsReport(storeId: string) {
   const saleItems = await prisma.saleItem.findMany({
     where: { sale: { storeId, status: 'COMPLETED' }, canceledAt: null },
-    include: { product: { include: { category: true } } },
+    select: {
+      productId: true,
+      unitPrice: true,
+      quantity: true,
+      profit: true,
+      product: { select: { name: true, category: { select: { name: true } } } },
+    },
   });
 
   const perProduct = new Map<
@@ -386,7 +393,13 @@ export async function profitMarginByCategory(storeId: string) {
 
   const saleItems = await prisma.saleItem.findMany({
     where: { sale: { storeId, status: 'COMPLETED' }, canceledAt: null },
-    include: { product: { include: { category: true } } },
+    select: {
+      productId: true,
+      unitPrice: true,
+      quantity: true,
+      profit: true,
+      product: { select: { name: true, category: { select: { name: true } } } },
+    },
   });
 
   const perCategory = new Map<string, { revenue: number; profit: number }>();
@@ -412,7 +425,7 @@ export async function suppliersReport(storeId: string) {
 
   const transactions = await prisma.supplierTransaction.findMany({
     where: { storeId },
-    include: { supplier: true },
+    select: { id: true, supplierId: true, total: true, supplier: { select: { id: true, name: true } } },
   });
 
   const perSupplier = new Map<

@@ -11,6 +11,8 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('8h'),
   CORS_ORIGIN: z.string().default('*'),
   SOCKET_CORS_ORIGIN: z.string().default('*'),
+  DB_POOL_MAX: z.coerce.number().default(10),
+  DB_POOL_IDLE_TIMEOUT: z.coerce.number().default(30000),
 });
 
 const parsed = envSchema.safeParse(process.env);

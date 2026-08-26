@@ -121,6 +121,7 @@ model User {
   facturas         Factura[]
   cancellations    Cancellation[]
   stockMovements   StockMovement[]
+  @@index([storeId])
 }
 
 model RevokedToken {
@@ -132,6 +133,7 @@ model RevokedToken {
   createdAt DateTime @default(now())
 
   @@index([expiresAt])
+  @@index([userId])
 }
 
 model Category {
@@ -169,6 +171,7 @@ model Product {
   stockMovements       StockMovement[]
 
   @@index([storeId])
+  @@index([categoryId])
 }
 
 model Inventory {
@@ -241,6 +244,7 @@ model StockMovement {
   @@index([reasonId])
   @@index([batchId])
   @@index([referenceType, referenceId])
+  @@index([userId])
 }
 
 // Snapshot de apertura del día: captura el stock al iniciar operaciones.
@@ -296,6 +300,7 @@ model Sale {
   @@index([saleNumber])
   @@index([status])
   @@index([clienteId])
+  @@index([userId])
 }
 
 model SaleItem {
@@ -316,6 +321,9 @@ model SaleItem {
   canceledBy       String?
   cancellationId   String?
   cancellation     Cancellation? @relation(fields: [cancellationId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
 }
 
 model Supplier {
@@ -360,6 +368,8 @@ model SupplierTransaction {
   createdAt     DateTime                     @default(now())
 
   @@index([storeId, createdAt])
+  @@index([supplierId])
+  @@index([userId])
 }
 
 model SupplierTransactionItem {
@@ -376,6 +386,9 @@ model SupplierTransactionItem {
   marginPct   Decimal              @db.Decimal(5, 2) @default(16)
   // Precio de venta resultante (sugerido o sobrescrito por el usuario).
   sellingPrice Decimal?            @db.Decimal(12, 2)
+
+  @@index([transactionId])
+  @@index([productId])
 }
 
 model AuditLog {
@@ -392,6 +405,7 @@ model AuditLog {
 
   @@index([storeId, createdAt])
   @@index([entity, entityId])
+  @@index([userId])
 }
 
 model Cliente {
@@ -454,6 +468,7 @@ model Factura {
 
   @@index([storeId, createdAt])
   @@index([clienteId])
+  @@index([userId])
 }
 
 model Cancellation {
@@ -482,6 +497,7 @@ model Cancellation {
   @@index([storeId, createdAt])
   @@index([entityType, entityId])
   @@index([cancellationReasonId])
+  @@index([userId])
 }
 
 // Artículos cancelados dentro de una cancelación (usado en cancelaciones parciales).
