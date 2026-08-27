@@ -1,8 +1,8 @@
 import { ApiError } from './ApiError';
+import { UTC_OFFSET_HOURS, getCurrentDateInTz } from '../config/timezone';
 
-// Las fechas "YYYY-MM-DD" se interpretan en hora local del servidor; si se
-// usara new Date(str) quedarían ancladas a medianoche UTC y el día cambiaría
-// en zonas horarias al este/oeste de UTC.
+// Las fechas "YYYY-MM-DD" se interpretan en la zona horaria configurada (por defecto America/Mazatlan UTC-7).
+// Esto garantiza consistencia entre backend y frontend aun cuando el servidor esté en EE.UU. y el frontend en México.
 export function parseLocalDate(dateStr: string): Date {
   const onlyDay = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
   if (onlyDay) {
@@ -19,38 +19,41 @@ export function parseLocalDate(dateStr: string): Date {
   return parsed;
 }
 
-// El servidor corre en la zona horaria del negocio (México, p. ej.
-// America/Mazatlan UTC-7 u America/Mexico_City UTC-6). En lugar de fijar un
-// offset arbitrario, calculamos el "día de negocio" con la hora local real del
-// servidor. Así el corte de caja, el cierre de caja y la fecha "hoy" del
-// frontend (que también usa la hora local del cliente, en la misma zona) coinciden
-// y una venta hecha el martes a las 23:30 se contabiliza el martes, no el miércoles.
+// Calcula el "día de negocio" en la zona horaria configurada.
+// En lugar de usar new Date() (que toma la zona horaria del servidor),
+// ajustamos por el offset configurado así la fecha "hoy" es consistente
+// independientemente de dónde se despliegue el servidor.
 function mexicoDateParts(dateStr?: string): { y: number; mo: number; d: number } {
   if (dateStr) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
     if (!m) throw ApiError.badRequest('Fecha inválida', 'INVALID_DATE');
     return { y: Number(m[1]), mo: Number(m[2]) - 1, d: Number(m[3]) };
   }
-  const n = new Date();
-  return { y: n.getFullYear(), mo: n.getMonth(), d: n.getDate() };
+  const now = getCurrentDateInTz();
+  return { y: now.getFullYear(), mo: now.getMonth(), d: now.getDate() };
 }
 
-/** Instante de la medianoche LOCAL del servidor (día de México) del día indicado (o de hoy). */
+/** Instante de la medianoche en la zona horaria configurada (día de negocio) del día indicado (o de hoy). */
 export function mexicoStartOfDay(dateStr?: string): Date {
-  const { y, mo, d } = mexicoDateParts(dateStr);
-  return new Date(y, mo, d);
+  const { y, mo, d: day } = mexicoDateParts(dateStr);
+  // Crear la fecha y ajustar al offset de la zona configurada
+  const date = new Date(y, mo, day);
+  const offsetMs = UTC_OFFSET_HOURS * 60 * 60 * 1000;
+  return new Date(date.getTime() + offsetMs);
 }
 
-/** Último milisegundo del día local del servidor (día de México) indicado (o de hoy). */
+/** Último milisegundo del día en la zona horaria configurada (día de México) indicado (o de hoy). */
 export function mexicoEndOfDay(dateStr?: string): Date {
   return new Date(mexicoStartOfDay(dateStr).getTime() + 24 * 60 * 60 * 1000 - 1);
 }
 
-/** Etiqueta "YYYY-MM-DD" del día local del servidor (México) correspondiente al instante dado. */
+/** Etiqueta "YYYY-MM-DD" del día en la zona horaria configurada correspondiente al instante dado. */
 export function mexicoLocalDateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  // First adjust the date to the configured timezone, then extract components
+  const adjusted = new Date(date.getTime() + UTC_OFFSET_HOURS * 60 * 60 * 1000);
+  const y = adjusted.getFullYear();
+  const m = String(adjusted.getMonth() + 1).padStart(2, '0');
+  const day = String(adjusted.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
 
@@ -59,7 +62,7 @@ export interface RangoMexico {
   hasta: Date;
 }
 
-/** Construye un rango [desde, hasta] en día local del servidor (México) a partir de filtros. */
+/** Construye un rango [desde, hasta] en día de la zona horaria configurada a partir de filtros. */
 export function rangoMexico(opts: {
   startDate?: string;
   endDate?: string;
