@@ -81,19 +81,11 @@ export async function openCaja(
   // Una misma caja solo puede tener una sesión por día. Si ya existe una sesión
   // (abierta o cerrada) para el día de hoy, no se crea una nueva: para volver a
   // operar la caja del día debe reabrirse desde el menú Cajas (ADMIN/GERENTE).
-  const ahora = new Date();
-  const hoyStr = mexicoLocalDateKey(ahora);
-  const inicioHoy = mexicoStartOfDay(hoyStr);
-  const finHoy = new Date(ahora.getTime() + 24 * 60 * 60 * 1000 - 1);
   const sesionHoy = await prisma.cajaSession.findFirst({
     where: {
       cajaId,
       storeId,
-      status: 'OPEN',
-      openedAt: {
-        gte: inicioHoy,
-        lte: finHoy,
-      },
+      openingDate: mexicoLocalDateKey(new Date()),
     },
   });
   if (sesionHoy) {
@@ -279,7 +271,10 @@ export async function closeCaja(
     data: {
       status: 'CLOSED',
       closedAt,
-      closingDate: mexicoLocalDateKey(closedAt),
+      // El cierre pertenece al día del turno (día en que se abrió la caja),
+      // no al instante calendario del cierre (un turno nocturno que cruza la
+      // medianoche se reporta bajo su apertura).
+      closingDate: session.openingDate,
       closedBy: userId,
       closingCash,
       closingElectronic,
@@ -418,14 +413,12 @@ export async function listSessions(storeId: string, filters: SessionFilters = {}
   if (filters.status) where.status = filters.status;
 
   if (filters.startDate || filters.endDate) {
-    const openedAt: Prisma.DateTimeFilter = {};
-    if (filters.startDate) openedAt.gte = mexicoStartOfDay(filters.startDate);
-    if (filters.endDate) {
-      const end = mexicoStartOfDay(filters.endDate);
-      end.setHours(23, 59, 59, 999);
-      openedAt.lte = end;
-    }
-    where.openedAt = openedAt;
+    // El día de negocio es el día en que se abrió el turno (openingDate), igual
+    // que en el reporte de corte: las sesiones se agrupan por su apertura.
+    const openingDate: Prisma.StringFilter = {};
+    if (filters.startDate) openingDate.gte = filters.startDate;
+    if (filters.endDate) openingDate.lte = filters.endDate;
+    where.openingDate = openingDate;
   }
 
   const sessions = await prisma.cajaSession.findMany({
