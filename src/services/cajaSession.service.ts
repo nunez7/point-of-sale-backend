@@ -81,9 +81,20 @@ export async function openCaja(
   // Una misma caja solo puede tener una sesión por día. Si ya existe una sesión
   // (abierta o cerrada) para el día de hoy, no se crea una nueva: para volver a
   // operar la caja del día debe reabrirse desde el menú Cajas (ADMIN/GERENTE).
-  const hoy = mexicoLocalDateKey(new Date());
+  const ahora = new Date();
+  const hoyStr = mexicoLocalDateKey(ahora);
+  const inicioHoy = mexicoStartOfDay(hoyStr);
+  const finHoy = new Date(ahora.getTime() + 24 * 60 * 60 * 1000 - 1);
   const sesionHoy = await prisma.cajaSession.findFirst({
-    where: { cajaId, storeId, openingDate: hoy },
+    where: {
+      cajaId,
+      storeId,
+      status: 'OPEN',
+      openedAt: {
+        gte: inicioHoy,
+        lte: finHoy,
+      },
+    },
   });
   if (sesionHoy) {
     throw ApiError.badRequest(
