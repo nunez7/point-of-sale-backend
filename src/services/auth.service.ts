@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { ApiError } from '../utils/ApiError';
 import { audit } from '../utils/audit';
 import { JwtPayload } from '../types';
+import { Role } from '../../generated/prisma/client.js';
 import { sha256 } from '../utils/tokenHash';
 
 function signToken(payload: JwtPayload): string {
@@ -34,6 +35,19 @@ export async function buildCajaContext(userId: string, storeId: string) {
       select: { id: true, cajaId: true, status: true, openedAt: true },
     });
     if (open) session = open;
+  } else {
+    // Para ADMIN/GERENTE sin caja asignada: buscar cualquier sesión abierta del usuario
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    if (user && (user.role === Role.ADMIN || user.role === Role.GERENTE)) {
+      const open = await prisma.cajaSession.findFirst({
+        where: { storeId, userId, status: 'OPEN' },
+        select: { id: true, cajaId: true, status: true, openedAt: true },
+      });
+      if (open) session = open;
+    }
   }
 
   return {
