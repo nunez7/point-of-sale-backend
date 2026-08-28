@@ -40,8 +40,15 @@ export const verifyCurrentPassword = asyncAuthHandler(
 export const authorizeCajaClose = asyncAuthHandler(
   async (req: AuthedRequest, res: Response) => {
     const { email, password } = req.body;
-    await authService.authorizeCajaClose(req.user!.storeId, email, password);
-    res.json({ message: 'Cierre de caja autorizado' });
+    const authorization = await authService.authorizeCajaClose(
+      req.user!.storeId,
+      email,
+      password
+    );
+    res.json({
+      message: 'Cierre de caja autorizado',
+      authorizationToken: authorization.authorizationToken,
+    });
   }
 );
 

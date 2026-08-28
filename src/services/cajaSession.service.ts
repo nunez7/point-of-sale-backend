@@ -273,13 +273,6 @@ export async function closeCaja(
       );
     }
   }
-  if (role === Role.VENDEDOR && session.userId !== userId) {
-    throw ApiError.forbidden(
-      'Solo el operador que abrió la caja puede cerrarla',
-      'CAJA_NOT_OPERATOR'
-    );
-  }
-
   const cut = await calcularCorte(session, storeId);
 
   const salesCash = cut.salesCash;
