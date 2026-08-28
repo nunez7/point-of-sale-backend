@@ -33,6 +33,7 @@ export const closeCaja = asyncAuthHandler(async (req: AuthedRequest, res: Respon
     closingCash: req.body.closingCash,
     closingElectronic: req.body.closingElectronic,
     closingNote: req.body.closingNote ?? null,
+    authorizationToken: req.body.authorizationToken,
   });
   emitToStore(storeId, 'caja:updated', { sessionId, type: 'cierre' });
   res.json({ session });

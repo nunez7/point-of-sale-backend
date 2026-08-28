@@ -1,6 +1,20 @@
 import { Router } from 'express';
-import { login, logout, me, updateMe, changeMyPassword } from '../controllers/auth.controller';
-import { loginSchema, updatePerfilSchema, cambiarPasswordSchema } from '../schemas';
+import {
+  login,
+  logout,
+  me,
+  updateMe,
+  verifyCurrentPassword,
+  authorizeCajaClose,
+  changeMyPassword,
+} from '../controllers/auth.controller';
+import {
+  loginSchema,
+  updatePerfilSchema,
+  verifyPasswordSchema,
+  authorizeCajaCloseSchema,
+  cambiarPasswordSchema,
+} from '../schemas';
 import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
 
@@ -10,6 +24,8 @@ router.post('/login', validate(loginSchema), login);
 router.post('/logout', requireAuth, logout);
 router.get('/me', requireAuth, me);
 router.patch('/me', requireAuth, validate(updatePerfilSchema), updateMe);
+router.post('/me/verify-password', requireAuth, validate(verifyPasswordSchema), verifyCurrentPassword);
+router.post('/authorize-caja-close', requireAuth, validate(authorizeCajaCloseSchema), authorizeCajaClose);
 router.patch('/me/password', requireAuth, validate(cambiarPasswordSchema), changeMyPassword);
 
 export default router;

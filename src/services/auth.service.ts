@@ -241,3 +241,52 @@ export async function changeMyPassword(
     metadata: { change: 'password' },
   });
 }
+
+export async function verifyCurrentPassword(userId: string, currentPassword: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw ApiError.notFound('Usuario no encontrado', 'USER_NOT_FOUND');
+  }
+
+  const valid = await bcrypt.compare(currentPassword, user.password);
+  if (!valid) {
+    throw ApiError.unauthorized(
+      'La contraseña actual es incorrecta',
+      'INVALID_CURRENT_PASSWORD'
+    );
+  }
+
+  return { valid: true };
+}
+
+export async function authorizeCajaClose(
+  storeId: string,
+  email: string,
+  password: string
+) {
+  const user = await prisma.user.findFirst({
+    where: { email, storeId, isActive: true },
+    select: { id: true, email: true, password: true, role: true },
+  });
+  const valid = user ? await bcrypt.compare(password, user.password) : false;
+  if (!valid || (user?.role !== Role.ADMIN && user?.role !== Role.GERENTE)) {
+    throw ApiError.forbidden(
+      'Solo un administrador o gerente puede autorizar el cierre',
+      'CLOSE_CAJA_AUTHORIZATION_REQUIRED'
+    );
+  }
+
+  const authorizationToken = jwt.sign(
+    {
+      userId: user!.id,
+      storeId,
+      role: user!.role,
+      email: user!.email,
+      purpose: 'CLOSE_CAJA',
+    },
+    env.JWT_SECRET,
+    { expiresIn: '5m' }
+  );
+
+  return { authorized: true, authorizationToken };
+}

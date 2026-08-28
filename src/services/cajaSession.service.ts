@@ -1,5 +1,7 @@
 import { prisma } from '../config/prisma';
 import { Prisma, Role, PaymentMethod } from '../../generated/prisma/client.js';
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env';
 import { ApiError } from '../utils/ApiError';
 import { audit } from '../utils/audit';
 import { mexicoStartOfDay, mexicoLocalDateKey } from '../utils/dates';
@@ -28,6 +30,7 @@ export interface CloseCajaInput {
   closingCash: number;
   closingElectronic: number;
   closingNote?: string | null;
+  authorizationToken?: string;
 }
 
 const sessionInclude = {
@@ -242,6 +245,33 @@ export async function closeCaja(
   if (!session) throw ApiError.notFound('Sesión de caja no encontrada', 'CAJA_SESSION_NOT_FOUND');
   if (session.status === 'CLOSED') {
     throw ApiError.badRequest('La caja ya está cerrada', 'CAJA_YA_CERRADA');
+  }
+  if (role === Role.VENDEDOR) {
+    if (!data.authorizationToken) {
+      throw ApiError.forbidden(
+        'Se requiere autorización de un administrador o gerente',
+        'CLOSE_CAJA_AUTHORIZATION_REQUIRED'
+      );
+    }
+    try {
+      const authorization = jwt.verify(data.authorizationToken, env.JWT_SECRET) as {
+        storeId?: string;
+        role?: string;
+        purpose?: string;
+      };
+      if (
+        authorization.storeId !== storeId ||
+        (authorization.role !== Role.ADMIN && authorization.role !== Role.GERENTE) ||
+        authorization.purpose !== 'CLOSE_CAJA'
+      ) {
+        throw new Error('Autorización inválida');
+      }
+    } catch {
+      throw ApiError.forbidden(
+        'La autorización de cierre no es válida o ya expiró',
+        'CLOSE_CAJA_AUTHORIZATION_INVALID'
+      );
+    }
   }
   if (role === Role.VENDEDOR && session.userId !== userId) {
     throw ApiError.forbidden(

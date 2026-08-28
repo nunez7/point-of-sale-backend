@@ -29,6 +29,22 @@ export const updateMe = asyncAuthHandler(async (req: AuthedRequest, res: Respons
   res.json({ user, message: 'Perfil actualizado correctamente' });
 });
 
+export const verifyCurrentPassword = asyncAuthHandler(
+  async (req: AuthedRequest, res: Response) => {
+    const { currentPassword } = req.body;
+    await authService.verifyCurrentPassword(req.user!.id, currentPassword);
+    res.json({ message: 'Contraseña verificada correctamente' });
+  }
+);
+
+export const authorizeCajaClose = asyncAuthHandler(
+  async (req: AuthedRequest, res: Response) => {
+    const { email, password } = req.body;
+    await authService.authorizeCajaClose(req.user!.storeId, email, password);
+    res.json({ message: 'Cierre de caja autorizado' });
+  }
+);
+
 export const changeMyPassword = asyncAuthHandler(
   async (req: AuthedRequest, res: Response) => {
     const { currentPassword, newPassword } = req.body;
