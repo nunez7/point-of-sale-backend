@@ -548,3 +548,17 @@ export const cierreCajaQuerySchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
     .optional(),
 });
+
+export const autoCloseConfigSchema = z.object({
+  autoCloseEnabled: z.boolean(),
+  autoCloseTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Formato HH:MM (24h)')
+    .optional()
+    .nullable(),
+  autoCloseDays: z
+    .array(z.string().regex(/^[0-6]$/))
+    .min(1, 'Seleccione al menos un día')
+    .max(7)
+    .optional(),
+});

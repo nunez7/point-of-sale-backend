@@ -4,11 +4,14 @@ import { env } from './config/env';
 import { logger } from './config/logger';
 import { initSocket } from './socket/socket';
 import { prisma } from './config/prisma';
+import { initScheduler } from './services/scheduler.service';
 
 async function start(): Promise<void> {
   try {
     await prisma.$connect();
     logger.info('✅ PostgreSQL conectado');
+
+    await initScheduler();
 
     const server = http.createServer(app);
     initSocket(server);

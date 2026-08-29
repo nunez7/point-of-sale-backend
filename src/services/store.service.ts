@@ -14,7 +14,10 @@ export type UpdateStoreInput = {
   notifyLowStock?: boolean;
   controlCajas?: boolean;
   aperturaCajaConInventario?: boolean;
-}
+  autoCloseEnabled?: boolean;
+  autoCloseTime?: string | null;
+  autoCloseDays?: string[];
+};
 
 function mapearErrorCodigoDuplicado(error: unknown): unknown {
   if (
@@ -51,7 +54,7 @@ export async function updateStore(
   }
 
   try {
-    return await prisma.$transaction(async (tx) => {
+return await prisma.$transaction(async (tx) => {
       const store = await tx.store.update({
         where: { id },
         data: {
@@ -62,12 +65,15 @@ export async function updateStore(
           ...(data.phone !== undefined && { phone: data.phone }),
           ...(data.rfc !== undefined && { rfc: data.rfc }),
           ...(data.regimenFiscal !== undefined && { regimenFiscal: data.regimenFiscal }),
-           ...(data.codigoPostal !== undefined && { codigoPostal: data.codigoPostal }),
-           ...(data.notifyOutOfStock !== undefined && { notifyOutOfStock: data.notifyOutOfStock }),
-           ...(data.notifyLowStock !== undefined && { notifyLowStock: data.notifyLowStock }),
-           ...(data.controlCajas !== undefined && { controlCajas: data.controlCajas }),
-           ...(data.aperturaCajaConInventario !== undefined && { aperturaCajaConInventario: data.aperturaCajaConInventario }),
-          },
+          ...(data.codigoPostal !== undefined && { codigoPostal: data.codigoPostal }),
+          ...(data.notifyOutOfStock !== undefined && { notifyOutOfStock: data.notifyOutOfStock }),
+          ...(data.notifyLowStock !== undefined && { notifyLowStock: data.notifyLowStock }),
+          ...(data.controlCajas !== undefined && { controlCajas: data.controlCajas }),
+          ...(data.aperturaCajaConInventario !== undefined && { aperturaCajaConInventario: data.aperturaCajaConInventario }),
+          ...(data.autoCloseEnabled !== undefined && { autoCloseEnabled: data.autoCloseEnabled }),
+          ...(data.autoCloseTime !== undefined && { autoCloseTime: data.autoCloseTime }),
+          ...(data.autoCloseDays !== undefined && { autoCloseDays: data.autoCloseDays }),
+        },
       });
 
       await tx.auditLog.create({
@@ -86,4 +92,12 @@ export async function updateStore(
   } catch (error) {
     throw mapearErrorCodigoDuplicado(error);
   }
+}
+
+export async function getAutoCloseConfig(storeId: string) {
+  const store = await prisma.store.findUnique({
+    where: { id: storeId },
+    select: { autoCloseEnabled: true, autoCloseTime: true, autoCloseDays: true },
+  });
+  return store ?? { autoCloseEnabled: false, autoCloseTime: null, autoCloseDays: ['1', '2', '3', '4', '5', '6'] };
 }

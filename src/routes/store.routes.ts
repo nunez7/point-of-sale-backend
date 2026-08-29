@@ -3,8 +3,10 @@ import {
   getCurrentStore,
   updateCurrentStore,
   updateDatosFiscalesStore,
+  getAutoCloseConfig,
+  updateAutoCloseConfig,
 } from '../controllers/store.controller';
-import { storeUpdateSchema, storeFiscalesSchema } from '../schemas';
+import { storeUpdateSchema, storeFiscalesSchema, autoCloseConfigSchema } from '../schemas';
 import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/role';
@@ -28,6 +30,21 @@ router.patch(
   requireRole(Role.ADMIN, Role.GERENTE),
   validate(storeUpdateSchema),
   updateCurrentStore
+);
+
+// Cierre automático de cajas (solo ADMIN/GERENTE)
+router.get(
+  '/current/auto-close',
+  requireAuth,
+  requireRole(Role.ADMIN, Role.GERENTE),
+  getAutoCloseConfig
+);
+router.patch(
+  '/current/auto-close',
+  requireAuth,
+  requireRole(Role.ADMIN, Role.GERENTE),
+  validate(autoCloseConfigSchema),
+  updateAutoCloseConfig
 );
 
 export default router;

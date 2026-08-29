@@ -84,6 +84,10 @@ model Store {
   // Módulo de cajas: control de apertura/cierre diario y asignación de cajas.
   controlCajas Boolean @default(false)
   aperturaCajaConInventario Boolean @default(true)
+  // Cierre automático de cajas
+  autoCloseEnabled Boolean   @default(false)
+  autoCloseTime    String?   // "HH:MM" 24-hour format
+  autoCloseDays    String[]  @default(["1","2","3","4","5","6"])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
