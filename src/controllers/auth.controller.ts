@@ -52,6 +52,21 @@ export const authorizeCajaClose = asyncAuthHandler(
   }
 );
 
+export const authorizeCajaOpen = asyncAuthHandler(
+  async (req: AuthedRequest, res: Response) => {
+    const { email, password } = req.body;
+    const authorization = await authService.authorizeCajaOpen(
+      req.user!.storeId,
+      email,
+      password
+    );
+    res.json({
+      message: 'Apertura de caja autorizada',
+      authorizationToken: authorization.authorizationToken,
+    });
+  }
+);
+
 export const changeMyPassword = asyncAuthHandler(
   async (req: AuthedRequest, res: Response) => {
     const { currentPassword, newPassword } = req.body;

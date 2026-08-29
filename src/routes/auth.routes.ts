@@ -6,6 +6,7 @@ import {
   updateMe,
   verifyCurrentPassword,
   authorizeCajaClose,
+  authorizeCajaOpen,
   changeMyPassword,
 } from '../controllers/auth.controller';
 import {
@@ -13,6 +14,7 @@ import {
   updatePerfilSchema,
   verifyPasswordSchema,
   authorizeCajaCloseSchema,
+  authorizeCajaOpenSchema,
   cambiarPasswordSchema,
 } from '../schemas';
 import { validate } from '../middleware/validate';
@@ -26,6 +28,7 @@ router.get('/me', requireAuth, me);
 router.patch('/me', requireAuth, validate(updatePerfilSchema), updateMe);
 router.post('/me/verify-password', requireAuth, validate(verifyPasswordSchema), verifyCurrentPassword);
 router.post('/authorize-caja-close', requireAuth, validate(authorizeCajaCloseSchema), authorizeCajaClose);
+router.post('/authorize-caja-open', requireAuth, validate(authorizeCajaOpenSchema), authorizeCajaOpen);
 router.patch('/me/password', requireAuth, validate(cambiarPasswordSchema), changeMyPassword);
 
 export default router;

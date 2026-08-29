@@ -290,3 +290,35 @@ export async function authorizeCajaClose(
 
   return { authorized: true, authorizationToken };
 }
+
+export async function authorizeCajaOpen(
+  storeId: string,
+  email: string,
+  password: string
+) {
+  const user = await prisma.user.findFirst({
+    where: { email, storeId, isActive: true },
+    select: { id: true, email: true, password: true, role: true },
+  });
+  const valid = user ? await bcrypt.compare(password, user.password) : false;
+  if (!valid || (user?.role !== Role.ADMIN && user?.role !== Role.GERENTE)) {
+    throw ApiError.forbidden(
+      'Solo un administrador o gerente puede autorizar la apertura',
+      'OPEN_CAJA_AUTHORIZATION_REQUIRED'
+    );
+  }
+
+  const authorizationToken = jwt.sign(
+    {
+      userId: user!.id,
+      storeId,
+      role: user!.role,
+      email: user!.email,
+      purpose: 'OPEN_CAJA',
+    },
+    env.JWT_SECRET,
+    { expiresIn: '5m' }
+  );
+
+  return { authorized: true, authorizationToken };
+}

@@ -298,6 +298,11 @@ export const authorizeCajaCloseSchema = z.object({
   password: z.string().min(1, 'La contraseña es requerida'),
 });
 
+export const authorizeCajaOpenSchema = z.object({
+  email: z.string().email('Email inválido'),
+  password: z.string().min(1, 'La contraseña es requerida'),
+});
+
 export const cambiarPasswordSchema = z.object({
   currentPassword: z.string().min(1, 'La contraseña actual es requerida'),
   newPassword: z.string().min(6, 'La nueva contraseña debe tener mínimo 6 caracteres'),
@@ -501,6 +506,7 @@ export const cajaOpenSchema = z.object({
   openingCash: z.number().min(0, 'El efectivo inicial no puede ser negativo').default(0),
   openingElectronic: z.number().min(0, 'El saldo electrónico inicial no puede ser negativo').default(0),
   openingNote: z.string().max(500, 'Máximo 500 caracteres').optional().nullable(),
+  authorizationToken: z.string().optional(),
 });
 
 export const cajaCloseSchema = z.object({

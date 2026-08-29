@@ -24,6 +24,7 @@ export interface OpenCajaInput {
   openingCash: number;
   openingElectronic: number;
   openingNote?: string | null;
+  authorizationToken?: string;
 }
 
 export interface CloseCajaInput {
@@ -54,13 +55,34 @@ export async function openCaja(
     throw ApiError.badRequest('La caja está inactiva', 'CAJA_INACTIVE');
   }
 
-  // Solo un administrador o gerente puede abrir una caja; el cajero (vendedor)
-  // opera la sesión que un administrador/gerente haya abierto.
+  // El vendedor solo puede abrir caja con autorización válida de ADMIN/GERENTE.
+  // Administradores y gerentes pueden abrir sin token.
   if (role === Role.VENDEDOR) {
-    throw ApiError.forbidden(
-      'Solo un administrador o gerente puede abrir la caja',
-      'CAJA_OPEN_FORBIDDEN'
-    );
+    if (!data.authorizationToken) {
+      throw ApiError.forbidden(
+        'Se requiere autorización de un administrador o gerente para abrir la caja',
+        'OPEN_CAJA_AUTHORIZATION_REQUIRED'
+      );
+    }
+    try {
+      const authorization = jwt.verify(data.authorizationToken, env.JWT_SECRET) as {
+        storeId?: string;
+        role?: string;
+        purpose?: string;
+      };
+      if (
+        authorization.storeId !== storeId ||
+        (authorization.role !== Role.ADMIN && authorization.role !== Role.GERENTE) ||
+        authorization.purpose !== 'OPEN_CAJA'
+      ) {
+        throw new Error('Autorización inválida');
+      }
+    } catch {
+      throw ApiError.forbidden(
+        'La autorización de apertura no es válida o ya expiró',
+        'OPEN_CAJA_AUTHORIZATION_INVALID'
+      );
+    }
   }
 
   const existing = await prisma.cajaSession.findFirst({

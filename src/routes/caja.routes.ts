@@ -66,7 +66,6 @@ router.get('/sessions/active', requireAuth, getActiveSession);
 router.post(
   '/:id/open',
   requireAuth,
-  requireRole(Role.ADMIN, Role.GERENTE),
   validate(idParamSchema, 'params'),
   validate(cajaOpenSchema),
   openCaja

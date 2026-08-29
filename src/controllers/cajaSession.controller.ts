@@ -17,6 +17,7 @@ export const openCaja = asyncAuthHandler(async (req: AuthedRequest, res: Respons
     openingCash: req.body.openingCash,
     openingElectronic: req.body.openingElectronic,
     openingNote: req.body.openingNote ?? null,
+    authorizationToken: req.body.authorizationToken,
   });
   emitToStore(storeId, 'caja:updated', { sessionId: session.id, type: 'apertura' });
   res.status(201).json({ session });
