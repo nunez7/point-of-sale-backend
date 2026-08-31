@@ -55,12 +55,33 @@ export type CreateStoreInput = {
   notifyLowStock?: boolean;
   controlCajas?: boolean;
   aperturaCajaConInventario?: boolean;
+  // Tienda fuente para copiar catálogos maestros. Si se omite, se intenta
+  // usar la tienda primaria del usuario; si tampoco hay, se omite la copia.
+  sourceStoreId?: string;
 };
 
 export async function createStore(data: CreateStoreInput, userId: string) {
   const existing = await prisma.store.findUnique({ where: { code: data.code } });
   if (existing) {
     throw ApiError.conflict('Ya existe una tienda con ese código', 'TIENDA_CODIGO_DUPLICADO');
+  }
+
+  // Resolver tienda fuente: explícita > primaria del usuario > ninguna.
+  let effectiveSourceId: string | null = null;
+  if (data.sourceStoreId) {
+    const src = await prisma.store.findUnique({ where: { id: data.sourceStoreId } });
+    if (!src || !src.isActive) {
+      throw ApiError.badRequest('Tienda fuente no encontrada', 'SOURCE_STORE_NOT_FOUND');
+    }
+    effectiveSourceId = src.id;
+  } else {
+    const primary = await prisma.userStore.findFirst({
+      where: { userId, isPrimary: true },
+      include: { store: { select: { isActive: true } } },
+    });
+    if (primary?.store.isActive) {
+      effectiveSourceId = primary.storeId;
+    }
   }
 
   return prisma.$transaction(async (tx) => {
@@ -92,6 +113,65 @@ export async function createStore(data: CreateStoreInput, userId: string) {
         metadata: { name: store.name, code: store.code },
       },
     });
+
+    // Copiar catálogos maestros si hay tienda fuente.
+    const copied = { categories: 0, cancellationReasons: 0, movementReasons: 0 };
+    if (effectiveSourceId) {
+      const [cats, cancelReasons, movReasons] = await Promise.all([
+        tx.category.findMany({
+          where: { storeId: effectiveSourceId },
+          select: { name: true },
+        }),
+        tx.cancellationReason.findMany({
+          where: { storeId: effectiveSourceId, isActive: true },
+          select: { name: true, isActive: true },
+        }),
+        tx.movementReason.findMany({
+          where: { storeId: effectiveSourceId, isActive: true },
+          select: { name: true, tipo: true, departamento: true, isActive: true },
+        }),
+      ]);
+
+      if (cats.length) {
+        const r = await tx.category.createMany({
+          data: cats.map((c) => ({ name: c.name, storeId: store.id })),
+        });
+        copied.categories = r.count;
+      }
+      if (cancelReasons.length) {
+        const r = await tx.cancellationReason.createMany({
+          data: cancelReasons.map((c) => ({
+            name: c.name,
+            isActive: c.isActive,
+            storeId: store.id,
+          })),
+        });
+        copied.cancellationReasons = r.count;
+      }
+      if (movReasons.length) {
+        const r = await tx.movementReason.createMany({
+          data: movReasons.map((m) => ({
+            name: m.name,
+            tipo: m.tipo,
+            departamento: m.departamento,
+            isActive: m.isActive,
+            storeId: store.id,
+          })),
+        });
+        copied.movementReasons = r.count;
+      }
+
+      await tx.auditLog.create({
+        data: {
+          storeId: store.id,
+          userId,
+          action: 'COPY_CATALOGS',
+          entity: 'STORE',
+          entityId: store.id,
+          metadata: { sourceStoreId: effectiveSourceId, ...copied },
+        },
+      });
+    }
 
     return store;
   });

@@ -316,6 +316,11 @@ export const createStoreSchema = z.object({
   notifyLowStock: z.boolean().optional(),
   controlCajas: z.boolean().optional(),
   aperturaCajaConInventario: z.boolean().optional(),
+  // Tienda desde la cual se copian los catálogos maestros (motivos de
+  // cancelación, categorías y motivos de movimientos de inventario).
+  // Si se omite, se usa la tienda primaria del usuario; si tampoco hay
+  // primaria activa, la tienda nueva se crea sin catálogos copiados.
+  sourceStoreId: z.string().min(1).optional(),
 });
 
 export const updatePerfilSchema = z.object({
