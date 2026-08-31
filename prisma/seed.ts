@@ -100,6 +100,29 @@ async function main() {
     });
   }
 
+  // ─── Motivos de movimientos de caja (inyección / retiro) ──
+  const motivosCajaBase = [
+    { tipo: 'INGRESO', name: 'Fondo de caja' },
+    { tipo: 'INGRESO', name: 'Cambio de turno' },
+    { tipo: 'INGRESO', name: 'Devolución a caja' },
+    { tipo: 'INGRESO', name: 'Depósito transferencia' },
+    { tipo: 'INGRESO', name: 'Pago con tarjeta' },
+    { tipo: 'INGRESO', name: 'Otro' },
+    { tipo: 'EGRESO', name: 'Retiro de feria' },
+    { tipo: 'EGRESO', name: 'Pago a proveedor' },
+    { tipo: 'EGRESO', name: 'Gasto menor' },
+    { tipo: 'EGRESO', name: 'Transferencia a banco' },
+    { tipo: 'EGRESO', name: 'Cambio de caja' },
+    { tipo: 'EGRESO', name: 'Otro' },
+  ];
+  for (const m of motivosCajaBase) {
+    await prisma.cajaMovimientoMotivo.upsert({
+      where: { storeId_name: { storeId: store.id, name: m.name } },
+      update: { tipo: m.tipo },
+      create: { storeId: store.id, tipo: m.tipo, name: m.name, isActive: true },
+    });
+  }
+
   // ─── Motivos de cancelación (editables luego desde el módulo de cancelaciones) ──
   const motivosCancelacionBase = [
     'Error de facturación',

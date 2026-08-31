@@ -519,6 +519,8 @@ export async function getSessionReport(sessionId: string, storeId: string) {
     orderBy: { createdAt: 'asc' },
   });
 
+  const mov = await resumenMovimientos(session.id, storeId);
+
   // Inventario: inicial (snapshot de apertura o reconstrucción) vs final.
   const inventories = await prisma.inventory.findMany({
     where: { storeId },
@@ -575,6 +577,12 @@ export async function getSessionReport(sessionId: string, storeId: string) {
     session,
     sales: sales.map((s) => ({ ...s, total: Number(s.total) })),
     purchases: purchases.map((p) => ({ ...p, total: Number(p.total) })),
+    movimientos: {
+      ingresoCash: Number(mov.ingresoCash),
+      egresoCash: Number(mov.egresoCash),
+      ingresoElectronic: Number(mov.ingresoElectronic),
+      egresoElectronic: Number(mov.egresoElectronic),
+    },
     inventory,
     inventoryAdjusted: session.inventoryAdjusted ?? false,
   };

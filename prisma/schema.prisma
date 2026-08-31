@@ -88,6 +88,11 @@ model Store {
   autoCloseEnabled Boolean   @default(false)
   autoCloseTime    String?   // "HH:MM" 24-hour format
   autoCloseDays    String[]  @default(["1","2","3","4","5","6"])
+  // Umbrales de alerta de movimientos de caja (null = sin límite).
+  // Aplican a TODAS las cajas de la tienda. Alertas suaves (no bloquean).
+  umbralAlertaEfectivo   Decimal? @db.Decimal(12, 2)
+  umbralAlertaTarjeta    Decimal? @db.Decimal(12, 2)
+  umbralAlertaEgresos    Decimal? @db.Decimal(12, 2)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -109,6 +114,8 @@ model Store {
   cajas           Caja[]
   cajaSessions    CajaSession[]
   cajaMovimientos CajaMovimiento[]
+  cajaMovimientoMotivos CajaMovimientoMotivo[]
+  cajaAlerts      CajaAlert[]
 }
 
 model User {
@@ -616,6 +623,7 @@ model CajaSession {
   sales        Sale[]
   supplierTxs  SupplierTransaction[]
   movimientos  CajaMovimiento[]
+  alerts       CajaAlert[]
 
   @@index([storeId, status])
   @@index([storeId, openingDate])
@@ -637,10 +645,52 @@ model CajaMovimiento {
   tipo          String // INGRESO | EGRESO
   metodo        String   @default("CASH") // CASH | ELECTRONIC
   monto         Decimal  @db.Decimal(12, 2)
-  motivo        String
+  motivoId      String?
+  motivo        CajaMovimientoMotivo? @relation(fields: [motivoId], references: [id])
+  motivoTexto   String?  // Texto libre cuando se selecciona "Otro"
   createdAt     DateTime @default(now())
 
   @@index([storeId])
   @@index([cajaSessionId])
   @@index([userId])
+}
+
+// Catálogo de motivos para movimientos de caja.
+// INGRESO = inyección de dinero (fondo, cambio, devolución).
+// EGRESO = retiro de dinero (feria, gasto, pago proveedor).
+model CajaMovimientoMotivo {
+  id        String   @id @default(uuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  tipo      String   // INGRESO | EGRESO
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  movimientos CajaMovimiento[]
+
+  @@unique([storeId, name])
+  @@index([storeId])
+  @@index([tipo])
+}
+
+// Registro histórico de alertas de umbral en caja.
+// Se crea cuando un egreso cruza el umbral configurado para la tienda.
+model CajaAlert {
+  id            String   @id @default(uuid())
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  cajaSessionId String
+  session       CajaSession @relation(fields: [cajaSessionId], references: [id], onDelete: Cascade)
+  tipo          String   // INGRESO | EGRESO
+  metodo        String   // CASH | ELECTRONIC
+  monto         Decimal  @db.Decimal(12, 2)
+  saldoDisponible Decimal @db.Decimal(12, 2)
+  umbral        Decimal  @db.Decimal(12, 2)
+  sobrepaso     Decimal  @db.Decimal(12, 2)
+  triggeredAt   DateTime @default(now())
+
+  @@index([storeId])
+  @@index([cajaSessionId])
+  @@index([triggeredAt])
 }

@@ -2,20 +2,88 @@ import { prisma } from '../config/prisma';
 import { Prisma } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 import { audit } from '../utils/audit';
+import { checkAndEmitCajaAlert } from './cajaAlert.service';
 
 export interface MovimientoInput {
   tipo: 'INGRESO' | 'EGRESO';
-  metodo: 'CASH' | 'ELECTRONIC';
+  metodo: 'CASH' | 'ELECTRONIC' | 'CARD' | 'TRANSFER';
   monto: number;
-  motivo: string;
+  motivoId?: string | null;
+  motivoTexto?: string | null;
 }
 
 const movimientoInclude = {
   user: { select: { id: true, name: true } },
+  motivo: { select: { id: true, name: true, tipo: true } },
 } satisfies Prisma.CajaMovimientoInclude;
+
+function toInternalMetodo(metodo: string): 'CASH' | 'ELECTRONIC' {
+  return metodo === 'CASH' ? 'CASH' : 'ELECTRONIC';
+}
+
+async function calcularSaldo(
+  sessionId: string,
+  storeId: string,
+  metodo: 'CASH' | 'ELECTRONIC'
+): Promise<Prisma.Decimal> {
+  const session = await prisma.cajaSession.findFirst({
+    where: { id: sessionId, storeId },
+    select: { openingCash: true, openingElectronic: true },
+  });
+  if (!session) return new Prisma.Decimal(0);
+
+  const mov = await resumenMovimientos(sessionId, storeId);
+
+  const saleGroups = await prisma.sale.groupBy({
+    by: ['paymentMethod'],
+    where: { cajaSessionId: sessionId, storeId, status: 'COMPLETED' },
+    _sum: { total: true },
+  });
+
+  const purchaseGroups = await prisma.supplierTransaction.groupBy({
+    by: ['paymentMethod'],
+    where: { cajaSessionId: sessionId, storeId, status: 'COMPLETED', paidFrom: 'CAJA' },
+    _sum: { total: true },
+  });
+
+  const ELECTRONIC_METHODS = ['CARD', 'TRANSFER', 'CREDIT', 'OTHER'];
+  const isElectronicMethod = (m: string) => ELECTRONIC_METHODS.includes(m);
+
+  let salesCash = new Prisma.Decimal(0);
+  let salesElectronic = new Prisma.Decimal(0);
+  let purchasesCash = new Prisma.Decimal(0);
+  let purchasesElectronic = new Prisma.Decimal(0);
+
+  for (const g of saleGroups) {
+    const total = g._sum.total ?? new Prisma.Decimal(0);
+    if (isElectronicMethod(g.paymentMethod)) salesElectronic = salesElectronic.plus(total);
+    else salesCash = salesCash.plus(total);
+  }
+
+  for (const g of purchaseGroups) {
+    const total = g._sum.total ?? new Prisma.Decimal(0);
+    if (isElectronicMethod(g.paymentMethod)) purchasesElectronic = purchasesElectronic.plus(total);
+    else purchasesCash = purchasesCash.plus(total);
+  }
+
+  if (metodo === 'CASH') {
+    return new Prisma.Decimal(session.openingCash)
+      .plus(salesCash)
+      .minus(purchasesCash)
+      .plus(mov.ingresoCash)
+      .minus(mov.egresoCash);
+  } else {
+    return new Prisma.Decimal(session.openingElectronic)
+      .plus(salesElectronic)
+      .minus(purchasesElectronic)
+      .plus(mov.ingresoElectronic)
+      .minus(mov.egresoElectronic);
+  }
+}
 
 // Registra un ingreso o egreso de dinero sobre una sesión abierta de caja.
 // Afecta el corte esperado según su método (efectivo o electrónico).
+// Valida que un egreso no supere el saldo disponible en el método.
 export async function crearMovimiento(
   storeId: string,
   userId: string,
@@ -35,15 +103,49 @@ export async function crearMovimiento(
   }
 
   const monto = new Prisma.Decimal(data.monto);
+  const internalMetodo = toInternalMetodo(data.metodo);
+
+  // Si es egreso, validar que la caja tenga saldo suficiente en el método.
+  if (data.tipo === 'EGRESO') {
+    const saldoDisponible = await calcularSaldo(sessionId, storeId, internalMetodo);
+    if (monto.greaterThan(saldoDisponible)) {
+      throw ApiError.badRequest(
+        `No hay saldo suficiente en ${internalMetodo === 'CASH' ? 'efectivo' : 'tarjeta'}. ` +
+          `Disponible: ${saldoDisponible.toFixed(2)}, solicitado: ${monto.toFixed(2)}`,
+        'CAJA_SALDO_INSUFICIENTE'
+      );
+    }
+  }
+
+  // Resolver motivo: si se envía motivoId, validar que exista y pertenezca a la tienda.
+  // motivoTexto se usa cuando el motivo seleccionado es "Otro" o no se eligió uno.
+  let motivoTexto: string | null = null;
+  if (data.motivoId) {
+    const motivo = await prisma.cajaMovimientoMotivo.findFirst({
+      where: { id: data.motivoId, storeId, isActive: true },
+    });
+    if (!motivo) {
+      throw ApiError.badRequest('Motivo no encontrado o inactivo', 'CAJA_MOTIVO_NOT_FOUND');
+    }
+    if (motivo.tipo !== data.tipo) {
+      throw ApiError.badRequest(
+        `El motivo "${motivo.name}" es de tipo ${motivo.tipo}, no ${data.tipo}`,
+        'CAJA_MOTIVO_TIPO_MISMATCH'
+      );
+    }
+  }
+  motivoTexto = data.motivoTexto?.trim() || null;
+
   const movimiento = await prisma.cajaMovimiento.create({
     data: {
       storeId,
       cajaSessionId: sessionId,
       userId,
       tipo: data.tipo,
-      metodo: data.metodo,
+      metodo: internalMetodo,
       monto,
-      motivo: data.motivo,
+      motivoId: data.motivoId ?? null,
+      motivoTexto,
     },
     include: movimientoInclude,
   });
@@ -57,11 +159,15 @@ export async function crearMovimiento(
     metadata: {
       cajaSessionId: sessionId,
       tipo: data.tipo,
-      metodo: data.metodo,
+      metodo: internalMetodo,
       monto: data.monto,
-      motivo: data.motivo,
+      motivoId: data.motivoId ?? null,
+      motivoTexto,
     },
   });
+
+  // Evaluar umbral y emitir alerta si corresponde (alerta suave, no bloquea).
+  await checkAndEmitCajaAlert(storeId, sessionId, data.tipo, internalMetodo, data.monto);
 
   return movimiento;
 }

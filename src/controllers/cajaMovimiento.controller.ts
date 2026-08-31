@@ -15,7 +15,8 @@ export const crearMovimiento = asyncAuthHandler(async (req: AuthedRequest, res: 
     tipo: req.body.tipo,
     metodo: req.body.metodo ?? 'CASH',
     monto: req.body.monto,
-    motivo: req.body.motivo,
+    motivoId: req.body.motivoId ?? null,
+    motivoTexto: req.body.motivoTexto ?? null,
   });
 
   emitToStore(storeId, 'caja:updated', { sessionId, type: 'movimiento' });

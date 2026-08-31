@@ -19,6 +19,17 @@ import {
   listarMovimientos,
 } from '../controllers/cajaMovimiento.controller';
 import {
+  listMotivos,
+  createMotivo,
+  updateMotivo,
+  deleteMotivo,
+} from '../controllers/cajaMovimientoMotivo.controller';
+import {
+  getUmbrales,
+  updateUmbrales,
+  getAlerts,
+} from '../controllers/cajaUmbral.controller';
+import {
   idParamSchema,
   cajaSchema,
   cajaUpdateSchema,
@@ -27,6 +38,9 @@ import {
   cajaMovimientoSchema,
   cajaReopenSchema,
   cajaSessionQuerySchema,
+  cajaMovimientoMotivoSchema,
+  cajaMovimientoMotivoUpdateSchema,
+  cajaUmbralesSchema,
 } from '../schemas';
 import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
@@ -34,6 +48,17 @@ import { requireRole } from '../middleware/role';
 import { Role } from '../../generated/prisma/client.js';
 
 const router = Router();
+
+// ---------- Umbrales y alertas de caja ----------
+router.get('/umbrales', requireAuth, getUmbrales);
+router.patch(
+  '/umbrales',
+  requireAuth,
+  requireRole(Role.ADMIN, Role.GERENTE),
+  validate(cajaUmbralesSchema),
+  updateUmbrales
+);
+router.get('/alertas', requireAuth, getAlerts);
 
 // ---------- Gestión de cajas (solo ADMIN/GERENTE) ----------
 router.get('/', requireAuth, listCajas);
@@ -59,7 +84,6 @@ router.delete(
   validate(idParamSchema, 'params'),
   deleteCaja
 );
-
 // ---------- Apertura / cierre de caja (cualquier usuario autenticado) ----------
 // Sesión abierta del usuario actual (caja asignada u operada).
 router.get('/sessions/active', requireAuth, getActiveSession);
@@ -116,6 +140,31 @@ router.post(
   validate(idParamSchema, 'params'),
   validate(cajaMovimientoSchema),
   crearMovimiento
+);
+
+// ---------- Motivos de movimiento de caja (catálogo) ----------
+router.get('/movimiento-motivos', requireAuth, listMotivos);
+router.post(
+  '/movimiento-motivos',
+  requireAuth,
+  requireRole(Role.ADMIN, Role.GERENTE),
+  validate(cajaMovimientoMotivoSchema),
+  createMotivo
+);
+router.patch(
+  '/movimiento-motivos/:id',
+  requireAuth,
+  requireRole(Role.ADMIN, Role.GERENTE),
+  validate(idParamSchema, 'params'),
+  validate(cajaMovimientoMotivoUpdateSchema),
+  updateMotivo
+);
+router.delete(
+  '/movimiento-motivos/:id',
+  requireAuth,
+  requireRole(Role.ADMIN, Role.GERENTE),
+  validate(idParamSchema, 'params'),
+  deleteMotivo
 );
 
 export default router;

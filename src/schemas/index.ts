@@ -533,9 +533,10 @@ export const cajaMovimientoSchema = z.object({
   tipo: z.enum(['INGRESO', 'EGRESO'], {
     errorMap: () => ({ message: 'El tipo debe ser INGRESO o EGRESO' }),
   }),
-  metodo: z.enum(['CASH', 'ELECTRONIC']).default('CASH'),
+  metodo: z.enum(['CASH', 'CARD', 'TRANSFER']).default('CASH'),
   monto: z.number().positive('El monto debe ser mayor a cero'),
-  motivo: z.string().min(1, 'El motivo es requerido').max(500, 'Máximo 500 caracteres'),
+  motivoId: z.string().min(1).optional().nullable(),
+  motivoTexto: z.string().max(500, 'Máximo 500 caracteres').optional().nullable(),
 });
 
 export const cajaReopenSchema = z.object({
@@ -567,4 +568,41 @@ export const autoCloseConfigSchema = z.object({
     .min(1, 'Seleccione al menos un día')
     .max(7)
     .optional(),
+});
+
+export const cajaMovimientoMotivoSchema = z.object({
+  tipo: z.enum(['INGRESO', 'EGRESO']),
+  name: z.string().min(1, 'El nombre del motivo es requerido').max(80, 'Máximo 80 caracteres'),
+  isActive: z.boolean().optional(),
+});
+
+export const cajaMovimientoMotivoUpdateSchema = cajaMovimientoMotivoSchema.partial().refine(
+  (d) => Object.keys(d).length > 0,
+  { message: 'Debe enviar al menos un campo a actualizar' }
+);
+
+export const cajaUmbralesSchema = z.object({
+  umbralAlertaEfectivo: z
+    .number()
+    .nonnegative('El umbral no puede ser negativo')
+    .nullable()
+    .optional(),
+  umbralAlertaTarjeta: z
+    .number()
+    .nonnegative('El umbral no puede ser negativo')
+    .nullable()
+    .optional(),
+  umbralAlertaEgresos: z
+    .number()
+    .nonnegative('El umbral no puede ser negativo')
+    .nullable()
+    .optional(),
+});
+
+export const cajaMovimientoCreateV2Schema = z.object({
+  tipo: z.enum(['INGRESO', 'EGRESO']),
+  metodo: z.enum(['CASH', 'CARD', 'TRANSFER']).default('CASH'),
+  monto: z.number().positive('El monto debe ser mayor a cero'),
+  motivoId: z.string().min(1).optional().nullable(),
+  motivoTexto: z.string().max(500, 'Máximo 500 caracteres').optional().nullable(),
 });
