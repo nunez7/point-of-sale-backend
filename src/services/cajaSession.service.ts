@@ -246,6 +246,10 @@ export async function previsualizarCorte(sessionId: string, storeId: string) {
     salesElectronic: Number(cut.salesElectronic),
     purchasesCash: Number(cut.purchasesCash),
     purchasesElectronic: Number(cut.purchasesElectronic),
+    ingresoCash: Number(cut.ingresoCash),
+    egresoCash: Number(cut.egresoCash),
+    ingresoElectronic: Number(cut.ingresoElectronic),
+    egresoElectronic: Number(cut.egresoElectronic),
     expectedCash: Number(cut.expectedCash),
     expectedElectronic: Number(cut.expectedElectronic),
   };
