@@ -19,7 +19,6 @@ import {
   productUpdateSchema,
   productQuerySchema,
   idParamSchema,
-  storeIdParamSchema,
   inventoryQuerySchema,
 } from '../schemas';
 import { validate } from '../middleware/validate';
@@ -30,29 +29,22 @@ import { uploadSingle } from '../config/multer';
 
 const router = Router();
 
-// Must be registered before /:id
+// Las rutas estáticas (inventory, low-stock, alerts, siguiente-codigo, template)
+// se registran ANTES de las rutas con parámetro para que Express no las
+// capture como `/:id`.
+
+// ---------- Inventario y alertas (scopeado a la tienda del token) ----------
 router.get(
-  '/inventory/:storeId',
+  '/inventory',
   requireAuth,
-  validate(storeIdParamSchema, 'params'),
   validate(inventoryQuerySchema, 'query'),
   getInventory
 );
-router.get(
-  '/low-stock/:storeId',
-  requireAuth,
-  validate(storeIdParamSchema, 'params'),
-  getLowStock
-);
-router.get(
-  '/alerts/:storeId',
-  requireAuth,
-  validate(storeIdParamSchema, 'params'),
-  getStockAlerts
-);
+router.get('/low-stock', requireAuth, getLowStock);
+router.get('/alerts', requireAuth, getStockAlerts);
 
+// ---------- Productos ----------
 router.get('/', requireAuth, validate(productQuerySchema, 'query'), listProducts);
-// Must be registered before /:id
 router.get('/siguiente-codigo', requireAuth, getSiguienteCodigo);
 router.get('/template', requireAuth, downloadProductTemplate);
 router.get('/:id', requireAuth, validate(idParamSchema, 'params'), getProduct);
@@ -86,12 +78,6 @@ router.post(
   requireRole(Role.ADMIN, Role.GERENTE),
   uploadSingle('file'),
   importProducts
-);
-
-router.get(
-  '/template',
-  requireAuth,
-  downloadProductTemplate
 );
 
 export default router;

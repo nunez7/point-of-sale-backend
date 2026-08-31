@@ -10,10 +10,6 @@ export const idParamSchema = z.object({
   id: z.string().min(1),
 });
 
-export const storeIdParamSchema = z.object({
-  storeId: z.string().min(1, 'El identificador de la tienda es requerido'),
-});
-
 export const paymentMethodSchema = z.enum(
   Object.values(PaymentMethod) as [string, ...string[]]
 );
@@ -94,14 +90,13 @@ export const saleSchema = z.object({
 });
 
 export const saleQuerySchema = z.object({
-  storeId: z.string().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
 });
 
 // Listado de pedidos: filtra por estado (PENDING por defecto) y rango de fechas.
+// La tienda se toma del token; el cliente ya no la envía.
 export const orderQuerySchema = z.object({
-  storeId: z.string().min(1, 'El identificador de la tienda es requerido'),
   status: z.enum(['PENDING', 'COMPLETED', 'CANCELED', 'ALL']).default('PENDING'),
   startDate: z
     .string()

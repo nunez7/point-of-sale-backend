@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { asyncAuthHandler, asyncHandler } from '../utils/asyncHandler';
+import { asyncAuthHandler } from '../utils/asyncHandler';
 import * as reportService from '../services/report.service';
 import type { AuthedRequest } from '../types';
 
@@ -19,9 +19,11 @@ export const cierreCaja = asyncAuthHandler(async (req: AuthedRequest, res: Respo
   res.json(result);
 });
 
-export const dailyReport = asyncHandler(async (req, res: Response) => {
-  const { storeId, date } = req.query as { storeId: string; date?: string };
-  const result = await reportService.dailyReport(storeId, date);
+// Todos los reportes están scopeados a la tienda del usuario autenticado.
+// Se ignora cualquier `storeId` enviado por el cliente.
+export const dailyReport = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const { date } = req.query as { date?: string };
+  const result = await reportService.dailyReport(req.user!.storeId, date);
   res.json(result);
 });
 
@@ -43,26 +45,23 @@ export const corteCaja = asyncAuthHandler(async (req: AuthedRequest, res: Respon
   res.json(result);
 });
 
-export const monthlyReport = asyncHandler(async (req, res: Response) => {
-  const { storeId, month } = req.query as { storeId: string; month?: string };
-  const result = await reportService.monthlyReport(storeId, month);
+export const monthlyReport = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const { month } = req.query as { month?: string };
+  const result = await reportService.monthlyReport(req.user!.storeId, month);
   res.json(result);
 });
 
-export const productsReport = asyncHandler(async (req, res: Response) => {
-  const { storeId } = req.query as { storeId: string };
-  const result = await reportService.productsReport(storeId);
+export const productsReport = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const result = await reportService.productsReport(req.user!.storeId);
   res.json(result);
 });
 
-export const profitMarginReport = asyncHandler(async (req, res: Response) => {
-  const { storeId } = req.query as { storeId: string };
-  const result = await reportService.profitMarginByCategory(storeId);
+export const profitMarginReport = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const result = await reportService.profitMarginByCategory(req.user!.storeId);
   res.json(result);
 });
 
-export const suppliersReport = asyncHandler(async (req, res: Response) => {
-  const { storeId } = req.query as { storeId: string };
-  const result = await reportService.suppliersReport(storeId);
+export const suppliersReport = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const result = await reportService.suppliersReport(req.user!.storeId);
   res.json(result);
 });

@@ -1,26 +1,25 @@
 import { Response } from 'express';
-import { asyncHandler, asyncAuthHandler } from '../utils/asyncHandler';
+import { asyncAuthHandler } from '../utils/asyncHandler';
 import * as productService from '../services/product.service';
 import * as inventoryService from '../services/inventory.service';
 import { getStockAlerts as fetchStockAlerts } from '../services/stockAlert.service';
 import { ApiError } from '../utils/ApiError';
 import { AuthedRequest } from '../types';
 
-export const listProducts = asyncHandler(async (req, res: Response) => {
-  const { storeId, search, category, includeInactive, page, limit, sortBy, sortOrder } =
-    req.query as {
-      storeId?: string;
-      search?: string;
-      category?: string;
-      includeInactive?: string;
-      page?: string;
-      limit?: string;
-      sortBy?: 'name' | 'category' | 'sku' | 'costPrice' | 'sellingPrice';
-      sortOrder?: 'asc' | 'desc';
-    };
+// Productos: scopeados a la tienda del usuario autenticado.
+export const listProducts = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const { search, category, includeInactive, page, limit, sortBy, sortOrder } = req.query as {
+    search?: string;
+    category?: string;
+    includeInactive?: string;
+    page?: string;
+    limit?: string;
+    sortBy?: 'name' | 'category' | 'sku' | 'costPrice' | 'sellingPrice';
+    sortOrder?: 'asc' | 'desc';
+  };
 
   const result = await productService.listProducts({
-    storeId,
+    storeId: req.user!.storeId,
     search,
     category,
     includeInactive: includeInactive === 'true',
@@ -34,8 +33,9 @@ export const listProducts = asyncHandler(async (req, res: Response) => {
   res.json(result);
 });
 
-export const getProduct = asyncHandler(async (req, res: Response) => {
-  const product = await productService.getProduct(req.params.id);
+export const getProduct = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  // El producto debe pertenecer a la tienda del token para evitar fugas.
+  const product = await productService.getProduct(req.params.id, req.user!.storeId);
   if (!product) throw ApiError.notFound('Producto no encontrado', 'PRODUCT_NOT_FOUND');
   res.json({ product });
 });
@@ -60,7 +60,9 @@ export const deleteProduct = asyncAuthHandler(async (req: AuthedRequest, res: Re
   res.json({ product, message: 'Producto eliminado' });
 });
 
-export const getInventory = asyncHandler(async (req, res: Response) => {
+// Inventario: scopeado a la tienda del usuario autenticado. La ruta ya no
+// recibe :storeId.
+export const getInventory = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
   const { search, page, limit, sortBy, sortOrder } = req.query as {
     search?: string;
     page?: string;
@@ -68,7 +70,7 @@ export const getInventory = asyncHandler(async (req, res: Response) => {
     sortBy?: 'name' | 'category' | 'quantity' | 'lowStockThreshold';
     sortOrder?: 'asc' | 'desc';
   };
-  const result = await inventoryService.getInventoryByStore(req.params.storeId, {
+  const result = await inventoryService.getInventoryByStore(req.user!.storeId, {
     search,
     page: page ? Math.max(1, parseInt(page, 10) || 1) : undefined,
     limit: limit ? Math.min(200, Math.max(1, parseInt(limit, 10) || 50)) : undefined,
@@ -78,12 +80,12 @@ export const getInventory = asyncHandler(async (req, res: Response) => {
   res.json(result);
 });
 
-export const getLowStock = asyncHandler(async (req, res: Response) => {
-  const lowStock = await inventoryService.getLowStock(req.params.storeId);
+export const getLowStock = asyncAuthHandler(async (_req: AuthedRequest, res: Response) => {
+  const lowStock = await inventoryService.getLowStock(_req.user!.storeId);
   res.json({ lowStock });
 });
 
-export const getStockAlerts = asyncHandler(async (req, res: Response) => {
-  const alerts = await fetchStockAlerts(req.params.storeId);
+export const getStockAlerts = asyncAuthHandler(async (_req: AuthedRequest, res: Response) => {
+  const alerts = await fetchStockAlerts(_req.user!.storeId);
   res.json({ alerts });
 });

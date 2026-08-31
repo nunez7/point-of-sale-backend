@@ -133,9 +133,9 @@ export async function listProducts(filters: ProductFilters) {
   };
 }
 
-export async function getProduct(id: string) {
-  return prisma.product.findUnique({
-    where: { id },
+export async function getProduct(id: string, storeId?: string) {
+  return prisma.product.findFirst({
+    where: { id, ...(storeId ? { storeId } : {}) },
     include: {
       category: true,
       inventories: { include: { store: true } },

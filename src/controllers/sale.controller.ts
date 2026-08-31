@@ -45,13 +45,18 @@ export const createSale = asyncAuthHandler(async (req: AuthedRequest, res: Respo
   res.status(201).json(result);
 });
 
-export const listSales = asyncHandler(async (req, res: Response) => {
-  const { storeId, startDate, endDate } = req.query as {
-    storeId?: string;
+export const listSales = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const { startDate, endDate } = req.query as {
     startDate?: string;
     endDate?: string;
   };
-  const sales = await saleService.listSales({ storeId, startDate, endDate });
+  // Scopeado a la tienda del usuario autenticado: se ignora cualquier
+  // `storeId` enviado por el cliente.
+  const sales = await saleService.listSales({
+    storeId: req.user!.storeId,
+    startDate,
+    endDate,
+  });
   res.json({ sales });
 });
 
@@ -78,17 +83,15 @@ export const lookupSale = asyncAuthHandler(async (req: AuthedRequest, res: Respo
 });
 
 export const listOrders = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
-  const { storeId, status, startDate, endDate } = req.query as {
-    storeId: string;
+  const { status, startDate, endDate } = req.query as {
     status?: string;
     startDate?: string;
     endDate?: string;
   };
-  if (storeId !== req.user!.storeId) {
-    throw ApiError.forbidden('Solo puedes operar en tu tienda', 'STORE_MISMATCH');
-  }
+  // Scopeado a la tienda del usuario autenticado: se ignora cualquier
+  // `storeId` enviado por el cliente.
   const orders = await saleService.listOrders({
-    storeId,
+    storeId: req.user!.storeId,
     status: (status as 'PENDING' | 'COMPLETED' | 'CANCELED' | 'ALL') ?? 'PENDING',
     startDate,
     endDate,
