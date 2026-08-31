@@ -195,10 +195,26 @@ export async function selectStore(userId: string, storeId: string) {
     throw ApiError.forbidden('Usuario inactivo', 'USER_INACTIVE');
   }
 
+  // Verifica que la tienda exista y esté activa.
+  const store = await prisma.store.findUnique({
+    where: { id: storeId },
+    select: { id: true, isActive: true },
+  });
+  if (!store) {
+    throw ApiError.notFound('Tienda no encontrada', 'STORE_NOT_FOUND');
+  }
+  if (!store.isActive) {
+    throw ApiError.forbidden('Tienda inactiva', 'STORE_INACTIVE');
+  }
+
+  // ADMIN/GERENTE pueden definir cualquier tienda activa como contexto de sesión.
+  // VENDEDOR (u otros roles) solo pueden seleccionar tiendas donde tienen membresía.
   const membership = await prisma.userStore.findUnique({
     where: { userId_storeId: { userId: user.id, storeId } },
   });
-  if (!membership) {
+
+  const isPrivileged = user.role === Role.ADMIN || user.role === Role.GERENTE;
+  if (!membership && !isPrivileged) {
     throw ApiError.forbidden(
       'No tienes acceso a esa tienda',
       'STORE_ACCESS_DENIED'
@@ -210,7 +226,7 @@ export async function selectStore(userId: string, storeId: string) {
   const tokenPayload: JwtPayload = {
     userId: user.id,
     storeId,
-    role: membership.role,
+    role: membership?.role ?? user.role,
     email: user.email,
     stores: userStores.map((s) => ({ storeId: s.storeId, role: s.role })),
   };
@@ -223,9 +239,11 @@ export async function selectStore(userId: string, storeId: string) {
     action: 'SELECT_STORE',
     entity: 'USER',
     entityId: user.id,
-    metadata: { storeId },
+    metadata: { storeId, privileged: isPrivileged && !membership },
   });
 
+  // Si no es miembro, sus `stores` se mantienen (membresías reales) y
+  // `storeId` representa la tienda "definida" actual para esta sesión.
   const storesDetail = await buildUserStoresDetail(user.id);
   const publicUser = publicUserShape(user, storeId, storesDetail);
   const cajaContext = await buildCajaContext(user.id, storeId);

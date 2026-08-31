@@ -11,7 +11,7 @@ async function main() {
   const store = await prisma.store.upsert({
     where: { code: 'STORE001' },
     update: {},
-    create: { name: 'Tienda Central', code: 'STORE001', address: 'Av. Principal 123', phone: '555-1234', codigoPostal: '11001', city: 'MX', country: 'Nayarit' },
+    create: { name: 'Tienda Central', code: 'STORE001', address: 'Av. Principal 123', phone: '555-1234', codigoPostal: '11001' },
   });
 
   const adminPassword = await bcrypt.hash('admin123', 10);
