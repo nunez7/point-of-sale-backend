@@ -14,6 +14,70 @@ function signToken(payload: JwtPayload): string {
   });
 }
 
+interface UserStoreRow {
+  storeId: string;
+  role: Role;
+  isPrimary: boolean;
+}
+
+async function loadUserStores(userId: string): Promise<UserStoreRow[]> {
+  return prisma.userStore.findMany({
+    where: { userId },
+    select: { storeId: true, role: true, isPrimary: true },
+  });
+}
+
+async function buildUserStoresDetail(userId: string) {
+  const rows = await prisma.userStore.findMany({
+    where: { userId },
+    select: {
+      storeId: true,
+      role: true,
+      isPrimary: true,
+      store: { select: { id: true, name: true, code: true } },
+    },
+  });
+  return rows
+    .sort((a, b) => {
+      if (a.isPrimary && !b.isPrimary) return -1;
+      if (!a.isPrimary && b.isPrimary) return 1;
+      return a.store.name.localeCompare(b.store.name);
+    })
+    .map((r) => ({
+      storeId: r.storeId,
+      name: r.store.name,
+      code: r.store.code,
+      role: r.role,
+      isPrimary: r.isPrimary,
+    }));
+}
+
+function pickInitialStoreId(stores: UserStoreRow[]): string | null {
+  if (!stores.length) return null;
+  const primary = stores.find((s) => s.isPrimary);
+  return (primary ?? stores[0]).storeId;
+}
+
+function publicUserShape(
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    role: Role;
+  },
+  storeId: string | null,
+  stores: { storeId: string; name: string; code: string; role: Role; isPrimary: boolean }[]
+) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    storeId,
+    stores,
+  };
+}
+
 // Contexto de caja del usuario: caja asignada (si la tienda usa control de
 // cajas), sesión abierta actual y configuración de la tienda. Permite al
 // frontend enlazar la caja automáticamente sin importar el equipo.
@@ -36,7 +100,6 @@ export async function buildCajaContext(userId: string, storeId: string) {
     });
     if (open) session = open;
   } else {
-    // Para ADMIN/GERENTE sin caja asignada: buscar cualquier sesión abierta del usuario
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { role: true },
@@ -77,22 +140,34 @@ export async function login(email: string, password: string) {
     throw ApiError.unauthorized('Credenciales inválidas', 'INVALID_CREDENTIALS');
   }
 
+  const userStores = await loadUserStores(user.id);
+  if (!userStores.length) {
+    throw ApiError.forbidden(
+      'El usuario no tiene tiendas asignadas',
+      'USER_HAS_NO_STORES'
+    );
+  }
+
   await prisma.user.update({
     where: { id: user.id },
     data: { lastLoginAt: new Date() },
   });
 
+  const activeStoreId = pickInitialStoreId(userStores)!;
+  const activeStoreRow = userStores.find((s) => s.storeId === activeStoreId)!;
+
   const tokenPayload: JwtPayload = {
     userId: user.id,
-    storeId: user.storeId,
-    role: user.role,
+    storeId: activeStoreId,
+    role: activeStoreRow.role,
     email: user.email,
+    stores: userStores.map((s) => ({ storeId: s.storeId, role: s.role })),
   };
 
   const accessToken = signToken(tokenPayload);
 
   await audit({
-    storeId: user.storeId,
+    storeId: activeStoreId,
     userId: user.id,
     action: 'LOGIN',
     entity: 'USER',
@@ -100,22 +175,66 @@ export async function login(email: string, password: string) {
     metadata: { email: user.email },
   });
 
-  const publicUser = {
-    id: user.id,
+  const storesDetail = await buildUserStoresDetail(user.id);
+  const publicUser = publicUserShape(user, activeStoreId, storesDetail);
+
+  const cajaContext = await buildCajaContext(user.id, activeStoreId);
+
+  return { token: accessToken, user: publicUser, ...cajaContext };
+}
+
+export async function selectStore(userId: string, storeId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true, role: true, isActive: true },
+  });
+  if (!user) {
+    throw ApiError.notFound('Usuario no encontrado', 'USER_NOT_FOUND');
+  }
+  if (!user.isActive) {
+    throw ApiError.forbidden('Usuario inactivo', 'USER_INACTIVE');
+  }
+
+  const membership = await prisma.userStore.findUnique({
+    where: { userId_storeId: { userId: user.id, storeId } },
+  });
+  if (!membership) {
+    throw ApiError.forbidden(
+      'No tienes acceso a esa tienda',
+      'STORE_ACCESS_DENIED'
+    );
+  }
+
+  const userStores = await loadUserStores(user.id);
+
+  const tokenPayload: JwtPayload = {
+    userId: user.id,
+    storeId,
+    role: membership.role,
     email: user.email,
-    name: user.name,
-    role: user.role,
-    storeId: user.storeId,
+    stores: userStores.map((s) => ({ storeId: s.storeId, role: s.role })),
   };
 
-  const cajaContext = await buildCajaContext(user.id, user.storeId);
+  const accessToken = signToken(tokenPayload);
+
+  await audit({
+    storeId,
+    userId: user.id,
+    action: 'SELECT_STORE',
+    entity: 'USER',
+    entityId: user.id,
+    metadata: { storeId },
+  });
+
+  const storesDetail = await buildUserStoresDetail(user.id);
+  const publicUser = publicUserShape(user, storeId, storesDetail);
+  const cajaContext = await buildCajaContext(user.id, storeId);
 
   return { token: accessToken, user: publicUser, ...cajaContext };
 }
 
 export async function logout(userId: string, token: string): Promise<void> {
   if (token) {
-    // Blacklist token until it expires (8h)
     await prisma.revokedToken.create({
       data: {
         tokenHash: sha256(token),
@@ -127,13 +246,17 @@ export async function logout(userId: string, token: string): Promise<void> {
   if (userId) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (user) {
-      await audit({
-        storeId: user.storeId,
-        userId: user.id,
-        action: 'LOGOUT',
-        entity: 'USER',
-        entityId: user.id,
-      });
+      const stores = await loadUserStores(userId);
+      const fallback = stores[0]?.storeId;
+      if (fallback) {
+        await audit({
+          storeId: fallback,
+          userId: user.id,
+          action: 'LOGOUT',
+          entity: 'USER',
+          entityId: user.id,
+        });
+      }
     }
   }
 }
@@ -146,7 +269,6 @@ export async function getMe(userId: string) {
       email: true,
       name: true,
       role: true,
-      storeId: true,
       isActive: true,
       createdAt: true,
     },
@@ -156,16 +278,36 @@ export async function getMe(userId: string) {
     throw ApiError.notFound('Usuario no encontrado', 'USER_NOT_FOUND');
   }
 
-  const cajaContext = await buildCajaContext(userId, user.storeId);
+  const userStores = await loadUserStores(userId);
+  if (!userStores.length) {
+    throw ApiError.forbidden(
+      'El usuario no tiene tiendas asignadas',
+      'USER_HAS_NO_STORES'
+    );
+  }
 
-  return { ...user, ...cajaContext };
+  const activeStoreId =
+    userStores.find((s) => s.isPrimary)?.storeId ?? userStores[0].storeId;
+
+  const storesDetail = await buildUserStoresDetail(userId);
+  const cajaContext = await buildCajaContext(userId, activeStoreId);
+
+  return {
+    ...publicUserShape(user, activeStoreId, storesDetail),
+    isActive: user.isActive,
+    createdAt: user.createdAt,
+    ...cajaContext,
+  };
 }
 
 export async function updateMe(
   userId: string,
   data: { name: string; email: string }
 ) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { userStores: { select: { storeId: true, isPrimary: true } } },
+  });
   if (!user) {
     throw ApiError.notFound('Usuario no encontrado', 'USER_NOT_FOUND');
   }
@@ -183,20 +325,22 @@ export async function updateMe(
       email: true,
       name: true,
       role: true,
-      storeId: true,
       isActive: true,
       createdAt: true,
     },
   });
 
-  await audit({
-    storeId: user.storeId,
-    userId: user.id,
-    action: 'UPDATE',
-    entity: 'USER',
-    entityId: user.id,
-    metadata: { changes: { name: data.name, email: data.email } },
-  });
+  const fallback = user.userStores.find((s) => s.isPrimary)?.storeId ?? user.userStores[0]?.storeId ?? '';
+  if (fallback) {
+    await audit({
+      storeId: fallback,
+      userId: user.id,
+      action: 'UPDATE',
+      entity: 'USER',
+      entityId: user.id,
+      metadata: { changes: { name: data.name, email: data.email } },
+    });
+  }
 
   return updated;
 }
@@ -206,7 +350,10 @@ export async function changeMyPassword(
   currentPassword: string,
   newPassword: string
 ) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { userStores: { select: { storeId: true, isPrimary: true } } },
+  });
   if (!user) {
     throw ApiError.notFound('Usuario no encontrado', 'USER_NOT_FOUND');
   }
@@ -232,14 +379,18 @@ export async function changeMyPassword(
     data: { password: hashed },
   });
 
-  await audit({
-    storeId: user.storeId,
-    userId: user.id,
-    action: 'UPDATE',
-    entity: 'USER',
-    entityId: user.id,
-    metadata: { change: 'password' },
-  });
+  const fallback =
+    user.userStores.find((s) => s.isPrimary)?.storeId ?? user.userStores[0]?.storeId ?? '';
+  if (fallback) {
+    await audit({
+      storeId: fallback,
+      userId: user.id,
+      action: 'UPDATE',
+      entity: 'USER',
+      entityId: user.id,
+      metadata: { change: 'password' },
+    });
+  }
 }
 
 export async function verifyCurrentPassword(userId: string, currentPassword: string) {
@@ -265,7 +416,11 @@ export async function authorizeCajaClose(
   password: string
 ) {
   const user = await prisma.user.findFirst({
-    where: { email, storeId, isActive: true },
+    where: {
+      email,
+      isActive: true,
+      userStores: { some: { storeId } },
+    },
     select: { id: true, email: true, password: true, role: true },
   });
   const valid = user ? await bcrypt.compare(password, user.password) : false;
@@ -297,7 +452,11 @@ export async function authorizeCajaOpen(
   password: string
 ) {
   const user = await prisma.user.findFirst({
-    where: { email, storeId, isActive: true },
+    where: {
+      email,
+      isActive: true,
+      userStores: { some: { storeId } },
+    },
     select: { id: true, email: true, password: true, role: true },
   });
   const valid = user ? await bcrypt.compare(password, user.password) : false;

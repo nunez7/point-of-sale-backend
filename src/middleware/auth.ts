@@ -34,6 +34,11 @@ export const requireAuth = asyncHandler(
 
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
+      include: {
+        userStores: {
+          select: { storeId: true, role: true },
+        },
+      },
     });
 
     if (!user) {
@@ -43,12 +48,18 @@ export const requireAuth = asyncHandler(
       throw ApiError.forbidden('Usuario inactivo', 'USER_INACTIVE');
     }
 
+    const stores = user.userStores.map((us) => ({
+      storeId: us.storeId,
+      role: us.role,
+    }));
+
     const authedUser: AuthedUser = {
       id: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
-      storeId: user.storeId,
+      storeId: payload.storeId,
+      stores,
       isActive: user.isActive,
     };
 

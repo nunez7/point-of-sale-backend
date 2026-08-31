@@ -31,6 +31,36 @@ export const getAutoCloseConfig = asyncAuthHandler(async (req: AuthedRequest, re
   res.json({ config });
 });
 
+export const getMyStores = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const stores = await storeService.listMyStores(req.user!.id);
+  res.json({ stores });
+});
+
+export const listAllStores = asyncAuthHandler(async (_req: AuthedRequest, res: Response) => {
+  const stores = await storeService.listAllStores();
+  res.json({ stores });
+});
+
+export const createStore = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const store = await storeService.createStore(req.body, req.user!.id);
+  res.status(201).json({ store, message: 'Tienda creada' });
+});
+
+export const updateStoreById = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const store = await storeService.updateStore(req.params.id, req.body, req.user!.id);
+  res.json({ store, message: 'Tienda actualizada' });
+});
+
+export const deleteStore = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const result = await storeService.deleteStore(req.params.id, req.user!.id);
+  res.json(result);
+});
+
+export const reactivateStore = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const store = await storeService.reactivateStore(req.params.id, req.user!.id);
+  res.json({ store, message: 'Tienda reactivada' });
+});
+
 export const updateAutoCloseConfig = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
   const storeId = req.user!.storeId;
   const { autoCloseEnabled, autoCloseTime, autoCloseDays } = req.body;

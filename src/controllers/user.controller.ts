@@ -22,3 +22,8 @@ export const deleteUser = asyncAuthHandler(async (req: AuthedRequest, res: Respo
   const result = await userService.deleteUser(req.params.id, req.user!.id);
   res.json(result);
 });
+
+export const setUserStores = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const result = await userService.setUserStores(req.params.id, req.body, req.user!.id);
+  res.json(result);
+});

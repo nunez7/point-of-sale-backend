@@ -6,13 +6,20 @@ import { mexicoLocalDateKey } from '../utils/dates';
 
 async function getSystemUserId(storeId: string): Promise<string> {
   const admin = await prisma.user.findFirst({
-    where: { storeId, role: 'ADMIN', isActive: true },
+    where: {
+      isActive: true,
+      role: 'ADMIN',
+      userStores: { some: { storeId } },
+    },
     select: { id: true },
     orderBy: { createdAt: 'asc' },
   });
   if (admin) return admin.id;
   const anyUser = await prisma.user.findFirst({
-    where: { storeId, isActive: true },
+    where: {
+      isActive: true,
+      userStores: { some: { storeId } },
+    },
     select: { id: true },
     orderBy: { createdAt: 'asc' },
   });

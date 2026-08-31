@@ -16,7 +16,7 @@ async function main() {
 
   const adminPassword = await bcrypt.hash('admin123', 10);
 
-  await prisma.user.upsert({
+  const adminUser = await prisma.user.upsert({
     where: { email: 'admin@servicaja.com' },
     update: {},
     create: {
@@ -24,8 +24,13 @@ async function main() {
       password: adminPassword,
       name: 'Administrador',
       role: 'ADMIN',
-      storeId: store.id,
     },
+  });
+
+  await prisma.userStore.upsert({
+    where: { userId_storeId: { userId: adminUser.id, storeId: store.id } },
+    update: {},
+    create: { userId: adminUser.id, storeId: store.id, role: 'ADMIN', isPrimary: true },
   });
 
   const categoriasBase = [

@@ -16,6 +16,7 @@ export interface UpdateCajaInput {
 
 const cajaInclude = {
   assignedUser: { select: { id: true, name: true, email: true, role: true } },
+  store: { select: { id: true, name: true } },
 } satisfies Prisma.CajaInclude;
 
 export async function listCajas(storeId: string) {
@@ -39,7 +40,10 @@ export async function getCaja(id: string, storeId: string) {
 async function validateAssignedUser(storeId: string, userId?: string | null) {
   if (!userId) return;
   const user = await prisma.user.findFirst({
-    where: { id: userId, storeId },
+    where: {
+      id: userId,
+      userStores: { some: { storeId } },
+    },
   });
   if (!user) {
     throw ApiError.badRequest(

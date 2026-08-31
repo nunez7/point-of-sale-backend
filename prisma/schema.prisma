@@ -78,25 +78,21 @@ model Store {
   saleSequence Int    @default(0)
   facturaSequence Int @default(0)
   purchaseSequence Int @default(0)
-  // Alertas de inventario configurables por el usuario.
   notifyOutOfStock Boolean @default(true)
   notifyLowStock   Boolean @default(true)
-  // Módulo de cajas: control de apertura/cierre diario y asignación de cajas.
   controlCajas Boolean @default(false)
   aperturaCajaConInventario Boolean @default(true)
-  // Cierre automático de cajas
   autoCloseEnabled Boolean   @default(false)
-  autoCloseTime    String?   // "HH:MM" 24-hour format
+  autoCloseTime    String?
   autoCloseDays    String[]  @default(["1","2","3","4","5","6"])
-  // Umbrales de alerta de movimientos de caja (null = sin límite).
-  // Aplican a TODAS las cajas de la tienda. Alertas suaves (no bloquean).
   umbralAlertaEfectivo   Decimal? @db.Decimal(12, 2)
   umbralAlertaTarjeta    Decimal? @db.Decimal(12, 2)
   umbralAlertaEgresos    Decimal? @db.Decimal(12, 2)
+  isActive   Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users          User[]            @relation("UserStore")
+  userStores        UserStore[]
   inventories    Inventory[]
   sales          Sale[]
   supplierTx     SupplierTransaction[]
@@ -124,13 +120,12 @@ model User {
   password     String
   name         String
   role         Role           @default(VENDEDOR)
-  storeId      String
-  store        Store          @relation("UserStore", fields: [storeId], references: [id], onDelete: Cascade)
   isActive     Boolean        @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
+  userStores       UserStore[]
   sales            Sale[]
   supplierTx       SupplierTransaction[]
   auditLogs        AuditLog[]
@@ -141,7 +136,26 @@ model User {
   cajasAsignadas   Caja[]            @relation("CajaUser")
   cajaSessions     CajaSession[]
   cajaMovimientos  CajaMovimiento[]
+}
+
+// Relación muchos a muchos Usuario↔Tienda: un usuario puede administrar
+// varias tiendas; cada membresía tiene su propio rol y opcionalmente marca
+// la tienda primaria (la que se autoselecciona tras el login).
+model UserStore {
+  id        String   @id @default(uuid())
+  userId    String
+  storeId   String
+  role      Role     @default(VENDEDOR)
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storeId])
   @@index([storeId])
+  @@index([userId, isPrimary])
 }
 
 model RevokedToken {

@@ -4,20 +4,41 @@ import { Role, Prisma } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 
 export async function listUsers(storeId: string) {
-  return prisma.user.findMany({
-    where: { storeId },
+  const users = await prisma.user.findMany({
+    where: {
+      userStores: { some: { storeId } },
+    },
     select: {
       id: true,
       email: true,
       name: true,
       role: true,
-      storeId: true,
       isActive: true,
       lastLoginAt: true,
       createdAt: true,
+      userStores: {
+        where: { storeId },
+        select: {
+          storeId: true,
+          role: true,
+          isPrimary: true,
+          store: { select: { id: true, name: true, code: true } },
+        },
+      },
     },
     orderBy: { createdAt: 'desc' },
   });
+
+  return users.map((u) => ({
+    ...u,
+    userStores: u.userStores.map((us) => ({
+      storeId: us.storeId,
+      role: us.role,
+      isPrimary: us.isPrimary,
+      name: us.store.name,
+      code: us.store.code,
+    })),
+  }));
 }
 
 export interface CreateUserInput {
@@ -44,14 +65,19 @@ export async function createUser(data: CreateUserInput, actorId: string) {
         password: hashed,
         name: data.name,
         role: data.role,
-        storeId: data.storeId,
+        userStores: {
+          create: {
+            storeId: data.storeId,
+            role: data.role,
+            isPrimary: true,
+          },
+        },
       },
       select: {
         id: true,
         email: true,
         name: true,
         role: true,
-        storeId: true,
         isActive: true,
       },
     });
@@ -63,7 +89,7 @@ export async function createUser(data: CreateUserInput, actorId: string) {
         action: 'CREATE',
         entity: 'USER',
         entityId: user.id,
-        metadata: { email: user.email, role: user.role },
+        metadata: { email: user.email, role: user.role, storeId: data.storeId },
       },
     });
 
@@ -80,7 +106,10 @@ export interface UpdateUserInput {
 }
 
 export async function updateUser(id: string, data: UpdateUserInput, actorId: string) {
-  const existing = await prisma.user.findUnique({ where: { id } });
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    include: { userStores: { where: { isPrimary: true }, select: { storeId: true } } },
+  });
   if (!existing) throw ApiError.notFound('Usuario no encontrado', 'USER_NOT_FOUND');
 
   const updateData: Record<string, unknown> = {};
@@ -99,28 +128,33 @@ export async function updateUser(id: string, data: UpdateUserInput, actorId: str
         email: true,
         name: true,
         role: true,
-        storeId: true,
         isActive: true,
       },
     });
 
-    await tx.auditLog.create({
-      data: {
-        storeId: user.storeId,
-        userId: actorId,
-        action: 'UPDATE',
-        entity: 'USER',
-        entityId: user.id,
-        metadata: { changes: data } as unknown as Prisma.InputJsonValue,
-      },
-    });
+    const fallback = existing.userStores[0]?.storeId ?? '';
+    if (fallback) {
+      await tx.auditLog.create({
+        data: {
+          storeId: fallback,
+          userId: actorId,
+          action: 'UPDATE',
+          entity: 'USER',
+          entityId: user.id,
+          metadata: { changes: data } as unknown as Prisma.InputJsonValue,
+        },
+      });
+    }
 
     return user;
   });
 }
 
 export async function deleteUser(id: string, actorId: string) {
-  const existing = await prisma.user.findUnique({ where: { id } });
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    include: { userStores: { where: { isPrimary: true }, select: { storeId: true } } },
+  });
   if (!existing) throw ApiError.notFound('Usuario no encontrado', 'USER_NOT_FOUND');
 
   if (existing.role === 'ADMIN' && existing.id === actorId) {
@@ -128,22 +162,78 @@ export async function deleteUser(id: string, actorId: string) {
   }
 
   return prisma.$transaction(async (tx) => {
-    const user = await tx.user.update({
+    await tx.user.update({
       where: { id },
       data: { isActive: false },
     });
 
+    const fallback = existing.userStores[0]?.storeId ?? '';
+    if (fallback) {
+      await tx.auditLog.create({
+        data: {
+          storeId: fallback,
+          userId: actorId,
+          action: 'DELETE',
+          entity: 'USER',
+          entityId: id,
+          metadata: { email: existing.email },
+        },
+      });
+    }
+
+    return { id, message: 'Usuario desactivado' };
+  });
+}
+
+export interface SetUserStoresInput {
+  stores: Array<{ storeId: string; role: Role; isPrimary?: boolean }>;
+}
+
+export async function setUserStores(userId: string, data: SetUserStoresInput, actorId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw ApiError.notFound('Usuario no encontrado', 'USER_NOT_FOUND');
+
+  if (!data.stores.length) {
+    throw ApiError.badRequest(
+      'El usuario debe tener al menos una tienda asignada',
+      'USER_MUST_HAVE_STORES'
+    );
+  }
+
+  const storeIds = data.stores.map((s) => s.storeId);
+  const stores = await prisma.store.findMany({
+    where: { id: { in: storeIds } },
+    select: { id: true },
+  });
+  if (stores.length !== storeIds.length) {
+    throw ApiError.notFound('Alguna tienda no existe', 'STORE_NOT_FOUND');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await tx.userStore.deleteMany({ where: { userId } });
+
+    await tx.userStore.createMany({
+      data: data.stores.map((s) => ({
+        userId,
+        storeId: s.storeId,
+        role: s.role,
+        isPrimary: s.isPrimary ?? false,
+      })),
+    });
+
+    const fallback = data.stores.find((s) => s.isPrimary)?.storeId ?? data.stores[0].storeId;
+
     await tx.auditLog.create({
       data: {
-        storeId: user.storeId,
+        storeId: fallback,
         userId: actorId,
-        action: 'DELETE',
+        action: 'UPDATE',
         entity: 'USER',
-        entityId: user.id,
-        metadata: { email: user.email },
+        entityId: userId,
+        metadata: { action: 'SET_USER_STORES', stores: data.stores },
       },
     });
 
-    return { id: user.id, message: 'Usuario desactivado' };
+    return { id: userId, stores: data.stores };
   });
 }

@@ -6,6 +6,7 @@ export interface JwtPayload {
   storeId: string;
   role: Role;
   email: string;
+  stores: { storeId: string; role: Role }[];
 }
 
 export interface AuthedUser {
@@ -14,6 +15,7 @@ export interface AuthedUser {
   name: string;
   role: Role;
   storeId: string;
+  stores: { storeId: string; role: Role }[];
   isActive: boolean;
 }
 

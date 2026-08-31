@@ -8,6 +8,7 @@ import {
   authorizeCajaClose,
   authorizeCajaOpen,
   changeMyPassword,
+  selectStore,
 } from '../controllers/auth.controller';
 import {
   loginSchema,
@@ -16,6 +17,7 @@ import {
   authorizeCajaCloseSchema,
   authorizeCajaOpenSchema,
   cambiarPasswordSchema,
+  selectStoreSchema,
 } from '../schemas';
 import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
@@ -30,5 +32,6 @@ router.post('/me/verify-password', requireAuth, validate(verifyPasswordSchema), 
 router.post('/authorize-caja-close', requireAuth, validate(authorizeCajaCloseSchema), authorizeCajaClose);
 router.post('/authorize-caja-open', requireAuth, validate(authorizeCajaOpenSchema), authorizeCajaOpen);
 router.patch('/me/password', requireAuth, validate(cambiarPasswordSchema), changeMyPassword);
+router.post('/select-store', requireAuth, validate(selectStoreSchema), selectStore);
 
 export default router;

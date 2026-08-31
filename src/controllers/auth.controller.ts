@@ -23,6 +23,14 @@ export const me = asyncAuthHandler(async (req: AuthedRequest, res: Response) => 
   res.json({ user });
 });
 
+export const selectStore = asyncAuthHandler(
+  async (req: AuthedRequest, res: Response) => {
+    const { storeId } = req.body;
+    const result = await authService.selectStore(req.user!.id, storeId);
+    res.json(result);
+  }
+);
+
 export const updateMe = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
   const { name, email } = req.body;
   const user = await authService.updateMe(req.user!.id, { name, email });

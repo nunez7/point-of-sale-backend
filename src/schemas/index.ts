@@ -174,6 +174,18 @@ export const updateUserSchema = z
     message: 'Debe enviar al menos un campo a actualizar',
   });
 
+export const setUserStoresSchema = z.object({
+  stores: z
+    .array(
+      z.object({
+        storeId: z.string().min(1),
+        role: z.nativeEnum(Role),
+        isPrimary: z.boolean().optional(),
+      })
+    )
+    .min(1, 'El usuario debe tener al menos una tienda'),
+});
+
 // ---------- Facturación (CFDI) ----------
 
 // Catálogo c_RégimenFiscal del SAT
@@ -284,6 +296,33 @@ export const storeFiscalesSchema = z
     message: 'Debe enviar al menos un campo a actualizar',
   });
 
+// Crear tienda (ADMIN).
+export const createStoreSchema = z.object({
+  name: z.string().trim().min(1, 'El nombre es requerido').max(120),
+  code: z
+    .string()
+    .trim()
+    .min(1, 'El código es requerido')
+    .max(20)
+    .regex(/^[A-Z0-9-]+$/i, 'Solo letras, números y guiones'),
+  address: z.string().trim().max(255).optional().nullable(),
+  representante: z.string().trim().max(120).optional().nullable(),
+  phone: z
+    .string()
+    .trim()
+    .max(30)
+    .regex(/^[\d\s+-]*$/, 'Solo números, espacios, + y -')
+    .optional()
+    .nullable(),
+  rfc: rfcSchema.optional().nullable(),
+  regimenFiscal: regimenFiscalSchema.optional().nullable(),
+  codigoPostal: codigoPostalSchema.optional().nullable(),
+  notifyOutOfStock: z.boolean().optional(),
+  notifyLowStock: z.boolean().optional(),
+  controlCajas: z.boolean().optional(),
+  aperturaCajaConInventario: z.boolean().optional(),
+});
+
 export const updatePerfilSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
   email: z.string().email('Email inválido'),
@@ -301,6 +340,10 @@ export const authorizeCajaCloseSchema = z.object({
 export const authorizeCajaOpenSchema = z.object({
   email: z.string().email('Email inválido'),
   password: z.string().min(1, 'La contraseña es requerida'),
+});
+
+export const selectStoreSchema = z.object({
+  storeId: z.string().min(1, 'El ID de tienda es requerido'),
 });
 
 export const cambiarPasswordSchema = z.object({
