@@ -30,12 +30,13 @@ export const closeCaja = asyncAuthHandler(async (req: AuthedRequest, res: Respon
   const sessionId = req.params.id;
   if (!sessionId) throw ApiError.badRequest('El id de la sesi��n es requerido', 'BAD_REQUEST');
 
-  const session = await cajaSessionService.closeCaja(sessionId, storeId, userId, role, {
-    closingCash: req.body.closingCash,
-    closingElectronic: req.body.closingElectronic,
-    closingNote: req.body.closingNote ?? null,
-    authorizationToken: req.body.authorizationToken,
-  });
+  const session = await cajaSessionService.closeCaja(
+    sessionId,
+    storeId,
+    userId,
+    role,
+    req.body as cajaSessionService.CloseCajaInput
+  );
   emitToStore(storeId, 'caja:updated', { sessionId, type: 'cierre' });
   res.json({ session });
 });

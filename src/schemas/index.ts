@@ -510,8 +510,13 @@ export const cajaOpenSchema = z.object({
 });
 
 export const cajaCloseSchema = z.object({
-  closingCash: z.number().min(0, 'El efectivo declarado no puede ser negativo'),
-  closingElectronic: z.number().min(0, 'El saldo electrónico declarado no puede ser negativo'),
+  closingAmounts: z.object({
+    CASH: z.number().min(0, 'El efectivo contado no puede ser negativo').default(0),
+    CARD: z.number().min(0, 'El monto de tarjeta no puede ser negativo').default(0),
+    TRANSFER: z.number().min(0, 'El monto de transferencia no puede ser negativo').default(0),
+    CREDIT: z.number().min(0, 'El monto de crédito no puede ser negativo').default(0),
+    OTHER: z.number().min(0, 'El monto de otro no puede ser negativo').default(0),
+  }),
   closingNote: z.string().max(500, 'Máximo 500 caracteres').optional().nullable(),
   authorizationToken: z.string().optional(),
 });

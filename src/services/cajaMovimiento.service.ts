@@ -194,6 +194,102 @@ export interface ResumenMovimientos {
   egresoElectronic: Prisma.Decimal;
 }
 
+// Resumen de movimientos desglosado por método de pago real (CASH, CARD,
+// TRANSFER, CREDIT, OTHER). Devuelve un record por cada PaymentMethod con
+// los totales de ingreso y egreso.
+export interface ResumenMovimientosPorMetodo {
+  ingreso: Record<string, Prisma.Decimal>;
+  egreso: Record<string, Prisma.Decimal>;
+}
+
+export async function resumenMovimientosPorMetodo(
+  sessionId: string,
+  storeId: string
+): Promise<ResumenMovimientosPorMetodo> {
+  const rows = await prisma.cajaMovimiento.findMany({
+    where: { cajaSessionId: sessionId, storeId },
+    select: { tipo: true, metodo: true, monto: true },
+  });
+
+  const zero: Record<string, Prisma.Decimal> = {
+    CASH: new Prisma.Decimal(0),
+    CARD: new Prisma.Decimal(0),
+    TRANSFER: new Prisma.Decimal(0),
+    CREDIT: new Prisma.Decimal(0),
+    OTHER: new Prisma.Decimal(0),
+  };
+  const ingreso: Record<string, Prisma.Decimal> = { ...zero };
+  const egreso: Record<string, Prisma.Decimal> = { ...zero };
+
+  for (const r of rows) {
+    // Compatibilidad: 'ELECTRONIC' (legacy) se reparte proporcionalmente no
+    // es posible sin info del método real, así que lo agrupamos en OTHER para
+    // no perder el total.
+    const metodo = r.metodo === 'ELECTRONIC' ? 'OTHER' : r.metodo;
+    if (r.tipo === 'INGRESO') {
+      ingreso[metodo] = (ingreso[metodo] ?? new Prisma.Decimal(0)).plus(r.monto);
+    } else {
+      egreso[metodo] = (egreso[metodo] ?? new Prisma.Decimal(0)).plus(r.monto);
+    }
+  }
+  return { ingreso, egreso };
+}
+
+export interface ResumenPorMotivo {
+  motivoId: string | null;
+  motivoName: string;
+  motivoTexto: string | null;
+  tipo: 'INGRESO' | 'EGRESO';
+  metodo: string;
+  total: number;
+  cantidad: number;
+}
+
+export async function resumenPorMotivo(
+  sessionId: string,
+  storeId: string
+): Promise<ResumenPorMotivo[]> {
+  const rows = await prisma.cajaMovimiento.findMany({
+    where: { cajaSessionId: sessionId, storeId },
+    select: {
+      tipo: true,
+      metodo: true,
+      monto: true,
+      motivoId: true,
+      motivoTexto: true,
+      motivo: { select: { name: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  const groups = new Map<string, ResumenPorMotivo & { _total: Prisma.Decimal; _cantidad: number }>();
+  for (const r of rows) {
+    const motivoName = r.motivo?.name ?? (r.motivoTexto ? 'Otro (texto libre)' : 'Sin motivo');
+    const key = `${r.tipo}|${r.metodo}|${r.motivoId ?? ''}|${r.motivoTexto ?? ''}|${motivoName}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing._total = existing._total.plus(r.monto);
+      existing._cantidad += 1;
+    } else {
+      groups.set(key, {
+        motivoId: r.motivoId ?? null,
+        motivoName,
+        motivoTexto: r.motivoTexto ?? null,
+        tipo: r.tipo as 'INGRESO' | 'EGRESO',
+        metodo: r.metodo,
+        total: 0,
+        cantidad: 0,
+        _total: new Prisma.Decimal(r.monto),
+        _cantidad: 1,
+      });
+    }
+  }
+  return Array.from(groups.values()).map((g) => {
+    const { _total, _cantidad, ...rest } = g;
+    return { ...rest, total: Number(_total), cantidad: _cantidad };
+  });
+}
+
 export async function resumenMovimientos(
   sessionId: string,
   storeId: string

@@ -601,11 +601,14 @@ model CajaSession {
   closedAt           DateTime?
   closingDate        String? // fecha local Mexico (yyyy-mm-dd) del cierre
   closedBy           String?
-  closingCash        Decimal? @db.Decimal(12, 2)
-  closingElectronic  Decimal? @db.Decimal(12, 2)
+  closingCash        Decimal? @db.Decimal(12, 2) // LEGACY: usar closingAmounts
+  closingElectronic  Decimal? @db.Decimal(12, 2) // LEGACY: usar closingAmounts
   closingNote        String?
+  closingAmounts     Json?    // { CASH, CARD, TRANSFER, CREDIT, OTHER }
+  expectedAmounts    Json?    // { CASH, CARD, TRANSFER, CREDIT, OTHER }
+  diffByMethod       Json?    // { CASH, CARD, TRANSFER, CREDIT, OTHER }
 
-  // Resultados calculados al cierre
+  // Resultados calculados al cierre (LEGACY: usar closingAmounts/expectedAmounts)
   salesCash           Decimal? @db.Decimal(12, 2)
   salesElectronic     Decimal? @db.Decimal(12, 2)
   purchasesCash       Decimal? @db.Decimal(12, 2)

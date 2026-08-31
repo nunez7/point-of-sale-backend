@@ -205,8 +205,27 @@ export async function corteCaja(
       startDate: startDate ?? date,
       endDate: endDate ?? date,
     });
-    cajas = cierreRes.rows;
+    cajas =     cierreRes.rows;
   }
+
+  // Agregados per-method del período (solo sesiones cerradas).
+  const totalExpectedByMethod: Record<string, number> = { CASH: 0, CARD: 0, TRANSFER: 0, CREDIT: 0, OTHER: 0 };
+  const totalClosingByMethod: Record<string, number> = { CASH: 0, CARD: 0, TRANSFER: 0, CREDIT: 0, OTHER: 0 };
+  const totalDiffByMethod: Record<string, number> = { CASH: 0, CARD: 0, TRANSFER: 0, CREDIT: 0, OTHER: 0 };
+  for (const r of cajas) {
+    const eb = r.expectedByMethod ?? {};
+    const cb = r.closingByMethod ?? {};
+    const db = r.diffByMethod ?? {};
+    for (const m of Object.keys(totalExpectedByMethod)) {
+      totalExpectedByMethod[m] += eb[m] ?? 0;
+      totalClosingByMethod[m] += cb[m] ?? 0;
+      totalDiffByMethod[m] += db[m] ?? 0;
+    }
+  }
+  const expectedByMethod = totalExpectedByMethod;
+  const closingByMethod = totalClosingByMethod;
+  const diffByMethod = totalDiffByMethod;
+  const movimientosPorMotivo = cajas.flatMap((r) => r.movimientosPorMotivo ?? []);
 
   // Anclar a día de México: el rango [desde, hasta] cubre el día calendario
   // completo de México sin importar la zona horaria del servidor.
@@ -432,6 +451,13 @@ export async function corteCaja(
     partialCancelledCount,
     cancellations,
     inventario,
+    totalExpectedByMethod,
+    totalClosingByMethod,
+    totalDiffByMethod,
+    expectedByMethod,
+    closingByMethod,
+    diffByMethod,
+    movimientosPorMotivo,
   };
 }
 
@@ -575,6 +601,18 @@ export interface CierreCajaFila {
   diffCash: number | null;
   diffElectronic: number | null;
   reopenReason: string | null;
+  // Per-method fields (from closingAmounts/expectedAmounts/diffByMethod JSON)
+  closingByMethod: Record<string, number> | null;
+  expectedByMethod: Record<string, number> | null;
+  diffByMethod: Record<string, number> | null;
+  // Desglose de movimientos por motivo para el reporte
+  movimientosPorMotivo: {
+    motivoName: string;
+    tipo: 'INGRESO' | 'EGRESO';
+    metodo: string;
+    total: number;
+    cantidad: number;
+  }[];
 }
 
 export interface CierreCajaFiltros {
@@ -643,13 +681,45 @@ export async function cierreCaja(
     movMap.set(id, entry);
   }
 
-  const rows: CierreCajaFila[] = sessions.map((s) => {
+  const rows: CierreCajaFila[] = await Promise.all(sessions.map(async (s) => {
     const mov = movMap.get(s.id) ?? {
       ingresoCash: 0,
       egresoCash: 0,
       ingresoElectronic: 0,
       egresoElectronic: 0,
     };
+    // Movimientos agrupados por motivo (incluye nombre del motivo).
+    const movs = await prisma.cajaMovimiento.findMany({
+      where: { cajaSessionId: s.id, storeId },
+      select: {
+        tipo: true,
+        metodo: true,
+        monto: true,
+        motivoId: true,
+        motivoTexto: true,
+        motivo: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    const grupos = new Map<string, { motivoName: string; tipo: 'INGRESO'|'EGRESO'; metodo: string; total: number; cantidad: number }>();
+    for (const m of movs) {
+      const motivoName = m.motivo?.name ?? (m.motivoTexto ? 'Otro (texto libre)' : 'Sin motivo');
+      const key = `${m.tipo}|${m.metodo}|${m.motivoId ?? ''}|${m.motivoTexto ?? ''}|${motivoName}`;
+      const ex = grupos.get(key);
+      if (ex) {
+        ex.total += Number(m.monto);
+        ex.cantidad += 1;
+      } else {
+        grupos.set(key, {
+          motivoName,
+          tipo: m.tipo as 'INGRESO'|'EGRESO',
+          metodo: m.metodo,
+          total: Number(m.monto),
+          cantidad: 1,
+        });
+      }
+    }
+
     return {
       id: s.id,
       cajaId: s.cajaId,
@@ -677,8 +747,12 @@ export async function cierreCaja(
       diffCash: s.diffCash != null ? Number(s.diffCash) : null,
       diffElectronic: s.diffElectronic != null ? Number(s.diffElectronic) : null,
       reopenReason: s.reopenReason ?? null,
+      closingByMethod: (s.closingAmounts as Record<string, number> | null) ?? null,
+      expectedByMethod: (s.expectedAmounts as Record<string, number> | null) ?? null,
+      diffByMethod: (s.diffByMethod as Record<string, number> | null) ?? null,
+      movimientosPorMotivo: Array.from(grupos.values()),
     };
-  });
+  }));
 
   return { rows };
 }

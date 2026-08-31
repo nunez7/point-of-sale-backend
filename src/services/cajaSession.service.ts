@@ -6,7 +6,7 @@ import { ApiError } from '../utils/ApiError';
 import { audit } from '../utils/audit';
 import { mexicoStartOfDay, mexicoLocalDateKey } from '../utils/dates';
 import { registerOpening } from './stockMovement.service';
-import { resumenMovimientos } from './cajaMovimiento.service';
+import { resumenMovimientos, resumenMovimientosPorMetodo, resumenPorMotivo } from './cajaMovimiento.service';
 
 // Métodos de pago que cuentan como "electrónico" en el corte de caja.
 const ELECTRONIC_METHODS: PaymentMethod[] = [
@@ -28,8 +28,7 @@ export interface OpenCajaInput {
 }
 
 export interface CloseCajaInput {
-  closingCash: number;
-  closingElectronic: number;
+  closingAmounts: Record<PaymentMethod, number>;
   closingNote?: string | null;
   authorizationToken?: string;
 }
@@ -158,9 +157,11 @@ export async function openCaja(
   return session;
 }
 
-// Calcula el corte de una sesión (efectivo/electrónico) sumando las ventas del
-// turno por método de pago y restando las compras pagadas con dinero de caja.
-// Se comparte entre el cierre y la previsualización del corte.
+// Calcula el corte de una sesión por método de pago (CASH, CARD, TRANSFER,
+// CREDIT, OTHER). Suma las ventas del turno, resta las compras pagadas con
+// dinero de caja, y suma/resta los movimientos manuales de caja. Devuelve
+// también los agregados efectivo/electrónico para mantener compatibilidad con
+// los usos existentes.
 export async function calcularCorte(
   session: { id: string; openingCash: Prisma.Decimal | number; openingElectronic: Prisma.Decimal | number },
   storeId: string
@@ -176,46 +177,121 @@ export async function calcularCorte(
     _sum: { total: true },
   });
 
+  // Initialize per-method buckets with zero for all PaymentMethod values.
+  const salesByMethod: Record<PaymentMethod, Prisma.Decimal> = {
+    CASH: new Prisma.Decimal(0),
+    CARD: new Prisma.Decimal(0),
+    TRANSFER: new Prisma.Decimal(0),
+    CREDIT: new Prisma.Decimal(0),
+    OTHER: new Prisma.Decimal(0),
+  };
+  const purchasesByMethod: Record<PaymentMethod, Prisma.Decimal> = {
+    CASH: new Prisma.Decimal(0),
+    CARD: new Prisma.Decimal(0),
+    TRANSFER: new Prisma.Decimal(0),
+    CREDIT: new Prisma.Decimal(0),
+    OTHER: new Prisma.Decimal(0),
+  };
+
+  for (const g of saleGroups) {
+    const m = g.paymentMethod as PaymentMethod;
+    const total = g._sum.total ?? new Prisma.Decimal(0);
+    if (salesByMethod[m] !== undefined) salesByMethod[m] = salesByMethod[m].plus(total);
+  }
+
+  for (const g of purchaseGroups) {
+    const m = g.paymentMethod as PaymentMethod;
+    const total = g._sum.total ?? new Prisma.Decimal(0);
+    if (purchasesByMethod[m] !== undefined) purchasesByMethod[m] = purchasesByMethod[m].plus(total);
+  }
+
   let salesCash = new Prisma.Decimal(0);
   let salesElectronic = new Prisma.Decimal(0);
-  for (const g of saleGroups) {
-    const total = g._sum.total ?? new Prisma.Decimal(0);
-    if (isElectronic(g.paymentMethod as PaymentMethod)) salesElectronic = salesElectronic.plus(total);
-    else salesCash = salesCash.plus(total);
+  for (const m of Object.values(PaymentMethod)) {
+    if (isElectronic(m)) salesElectronic = salesElectronic.plus(salesByMethod[m]);
+    else salesCash = salesCash.plus(salesByMethod[m]);
   }
 
   let purchasesCash = new Prisma.Decimal(0);
   let purchasesElectronic = new Prisma.Decimal(0);
-  for (const g of purchaseGroups) {
-    const total = g._sum.total ?? new Prisma.Decimal(0);
-    if (isElectronic(g.paymentMethod as PaymentMethod)) purchasesElectronic = purchasesElectronic.plus(total);
-    else purchasesCash = purchasesCash.plus(total);
+  for (const m of Object.values(PaymentMethod)) {
+    if (isElectronic(m)) purchasesElectronic = purchasesElectronic.plus(purchasesByMethod[m]);
+    else purchasesCash = purchasesCash.plus(purchasesByMethod[m]);
   }
 
+  // Movimientos manuales de caja: a partir de ahora también se desglosan por
+  // método real (CARD, TRANSFER, etc.) en lugar de agruparse en ELECTRONIC.
+  const movByMethod = await resumenMovimientosPorMetodo(session.id, storeId);
+
+  // Apertura: la declaración histórica separa efectivo vs. electrónico. Para
+  // mantener compatibilidad con el formato per-method, todo el efectivo de
+  // apertura va al bucket CASH y el resto (no usado en la práctica) a OTHER.
   const openingCash = new Prisma.Decimal(session.openingCash);
   const openingElectronic = new Prisma.Decimal(session.openingElectronic);
 
-  // Movimientos manuales de caja (ingreso/egreso) registrados en la sesión.
-  const mov = await resumenMovimientos(session.id, storeId);
-  const ingresoCash = mov.ingresoCash;
-  const egresoCash = mov.egresoCash;
-  const ingresoElectronic = mov.ingresoElectronic;
-  const egresoElectronic = mov.egresoElectronic;
+  const openingByMethod: Record<PaymentMethod, Prisma.Decimal> = {
+    CASH: openingCash,
+    CARD: new Prisma.Decimal(0),
+    TRANSFER: new Prisma.Decimal(0),
+    CREDIT: new Prisma.Decimal(0),
+    OTHER: openingElectronic,
+  };
 
-  // Solo las compras pagadas con dinero de caja (paidFrom = "CAJA") descuentan
-  // del corte; las pagadas con efectivo de dueño no afectan el corte.
-  const expectedCash = openingCash
-    .plus(salesCash)
-    .minus(purchasesCash)
-    .plus(ingresoCash)
-    .minus(egresoCash);
-  const expectedElectronic = openingElectronic
-    .plus(salesElectronic)
-    .minus(purchasesElectronic)
-    .plus(ingresoElectronic)
-    .minus(egresoElectronic);
+  // Compras a proveedor pagadas con dinero de caja. Solo las que tienen
+  // paidFrom=CAJA afectan al corte (las del dueño no).
+  // expectedByMethod[m] = openingByMethod[m] + salesByMethod[m]
+  //                       - purchasesByMethod[m]
+  //                       + movimientosIngresoByMethod[m]
+  //                       - movimientosEgresoByMethod[m]
+  const expectedByMethod: Record<PaymentMethod, Prisma.Decimal> = {
+    CASH: new Prisma.Decimal(0),
+    CARD: new Prisma.Decimal(0),
+    TRANSFER: new Prisma.Decimal(0),
+    CREDIT: new Prisma.Decimal(0),
+    OTHER: new Prisma.Decimal(0),
+  };
+  for (const m of Object.values(PaymentMethod)) {
+    expectedByMethod[m] = openingByMethod[m]
+      .plus(salesByMethod[m])
+      .minus(purchasesByMethod[m])
+      .plus(movByMethod.ingreso[m])
+      .minus(movByMethod.egreso[m]);
+  }
+
+  // Legacy aggregates (cash + electronic).
+  const ingresoCash = movByMethod.ingreso.CASH;
+  const egresoCash = movByMethod.egreso.CASH;
+  const ingresoElectronic = (['CARD', 'TRANSFER', 'CREDIT', 'OTHER'] as PaymentMethod[]).reduce(
+    (acc, m) => acc.plus(movByMethod.ingreso[m]),
+    new Prisma.Decimal(0)
+  );
+  const egresoElectronic = (['CARD', 'TRANSFER', 'CREDIT', 'OTHER'] as PaymentMethod[]).reduce(
+    (acc, m) => acc.plus(movByMethod.egreso[m]),
+    new Prisma.Decimal(0)
+  );
+
+  const expectedCash = expectedByMethod.CASH;
+  const expectedElectronic = (['CARD', 'TRANSFER', 'CREDIT', 'OTHER'] as PaymentMethod[]).reduce(
+    (acc, m) => acc.plus(expectedByMethod[m]),
+    new Prisma.Decimal(0)
+  );
+
+  // Serializa a number para enviar al frontend.
+  const num = (d: Prisma.Decimal) => Number(d);
+  const recordNums = (r: Record<PaymentMethod, Prisma.Decimal>): Record<PaymentMethod, number> => {
+    const out: Partial<Record<PaymentMethod, number>> = {};
+    for (const m of Object.values(PaymentMethod)) out[m] = num(r[m]);
+    return out as Record<PaymentMethod, number>;
+  };
 
   return {
+    salesByMethod: recordNums(salesByMethod),
+    purchasesByMethod: recordNums(purchasesByMethod),
+    openingByMethod: recordNums(openingByMethod),
+    expectedByMethod: recordNums(expectedByMethod),
+    movimientosIngresoByMethod: recordNums(movByMethod.ingreso),
+    movimientosEgresoByMethod: recordNums(movByMethod.egreso),
+    // Legacy
     salesCash,
     salesElectronic,
     purchasesCash,
@@ -242,6 +318,13 @@ export async function previsualizarCorte(sessionId: string, storeId: string) {
   }
   const cut = await calcularCorte(session, storeId);
   return {
+    salesByMethod: cut.salesByMethod,
+    purchasesByMethod: cut.purchasesByMethod,
+    openingByMethod: cut.openingByMethod,
+    expectedByMethod: cut.expectedByMethod,
+    movimientosIngresoByMethod: cut.movimientosIngresoByMethod,
+    movimientosEgresoByMethod: cut.movimientosEgresoByMethod,
+    // Legacy
     salesCash: Number(cut.salesCash),
     salesElectronic: Number(cut.salesElectronic),
     purchasesCash: Number(cut.purchasesCash),
@@ -308,11 +391,57 @@ export async function closeCaja(
   const expectedCash = cut.expectedCash;
   const expectedElectronic = cut.expectedElectronic;
 
-  const closingCash = new Prisma.Decimal(data.closingCash);
-  const closingElectronic = new Prisma.Decimal(data.closingElectronic);
+  // Normaliza los montos de cierre enviados por el frontend a un record
+  // completo con todos los métodos. Métodos no enviados = 0.
+  const normalizeAmounts = (
+    input: Record<string, number | undefined> | null | undefined
+  ): Record<PaymentMethod, Prisma.Decimal> => {
+    const out: Partial<Record<PaymentMethod, Prisma.Decimal>> = {};
+    for (const m of Object.values(PaymentMethod)) {
+      const v = input?.[m];
+      const n = typeof v === 'number' && Number.isFinite(v) ? v : 0;
+      out[m] = new Prisma.Decimal(n);
+    }
+    return out as Record<PaymentMethod, Prisma.Decimal>;
+  };
 
+  const closingByMethod = normalizeAmounts(data.closingAmounts);
+  const expectedByMethod: Record<PaymentMethod, Prisma.Decimal> = {
+    CASH: new Prisma.Decimal(0),
+    CARD: new Prisma.Decimal(0),
+    TRANSFER: new Prisma.Decimal(0),
+    CREDIT: new Prisma.Decimal(0),
+    OTHER: new Prisma.Decimal(0),
+  };
+  for (const m of Object.values(PaymentMethod)) {
+    expectedByMethod[m] = new Prisma.Decimal(cut.expectedByMethod[m] ?? 0);
+  }
+  const diffByMethod: Record<PaymentMethod, Prisma.Decimal> = {
+    CASH: new Prisma.Decimal(0),
+    CARD: new Prisma.Decimal(0),
+    TRANSFER: new Prisma.Decimal(0),
+    CREDIT: new Prisma.Decimal(0),
+    OTHER: new Prisma.Decimal(0),
+  };
+  for (const m of Object.values(PaymentMethod)) {
+    diffByMethod[m] = closingByMethod[m].minus(expectedByMethod[m]);
+  }
+
+  // Legacy aggregates para mantener compatibilidad con pantallas existentes.
+  const closingCash = closingByMethod.CASH;
+  const closingElectronic = (['CARD', 'TRANSFER', 'CREDIT', 'OTHER'] as PaymentMethod[]).reduce(
+    (acc, m) => acc.plus(closingByMethod[m]),
+    new Prisma.Decimal(0)
+  );
   const diffCash = closingCash.minus(expectedCash);
   const diffElectronic = closingElectronic.minus(expectedElectronic);
+
+  // Serializa los records a JSON-serializable (number).
+  const toJson = (r: Record<PaymentMethod, Prisma.Decimal>): Record<PaymentMethod, number> => {
+    const out: Partial<Record<PaymentMethod, number>> = {};
+    for (const m of Object.values(PaymentMethod)) out[m] = Number(r[m]);
+    return out as Record<PaymentMethod, number>;
+  };
 
   const closedAt = new Date();
   const closed = await prisma.cajaSession.update({
@@ -328,6 +457,9 @@ export async function closeCaja(
       closingCash,
       closingElectronic,
       closingNote: data.closingNote ?? null,
+      closingAmounts: toJson(closingByMethod) as unknown as Prisma.InputJsonValue,
+      expectedAmounts: toJson(expectedByMethod) as unknown as Prisma.InputJsonValue,
+      diffByMethod: toJson(diffByMethod) as unknown as Prisma.InputJsonValue,
       salesCash,
       salesElectronic,
       purchasesCash,
@@ -348,10 +480,9 @@ export async function closeCaja(
     entityId: session.id,
     metadata: {
       cajaId: session.cajaId,
-      expectedCash: expectedCash.toString(),
-      expectedElectronic: expectedElectronic.toString(),
-      diffCash: diffCash.toString(),
-      diffElectronic: diffElectronic.toString(),
+      closingByMethod: toJson(closingByMethod),
+      expectedByMethod: toJson(expectedByMethod),
+      diffByMethod: toJson(diffByMethod),
     },
   });
 
@@ -401,6 +532,9 @@ export async function reopenCaja(
       closingCash: null,
       closingElectronic: null,
       closingNote: null,
+      closingAmounts: Prisma.JsonNull,
+      expectedAmounts: Prisma.JsonNull,
+      diffByMethod: Prisma.JsonNull,
       salesCash: null,
       salesElectronic: null,
       purchasesCash: null,
@@ -524,6 +658,9 @@ export async function getSessionReport(sessionId: string, storeId: string) {
   });
 
   const mov = await resumenMovimientos(session.id, storeId);
+  const cut = await calcularCorte(session, storeId);
+
+  const movPorMotivo = await resumenPorMotivo(session.id, storeId);
 
   // Inventario: inicial (snapshot de apertura o reconstrucción) vs final.
   const inventories = await prisma.inventory.findMany({
@@ -577,16 +714,34 @@ export async function getSessionReport(sessionId: string, storeId: string) {
     };
   });
 
+  // Deserializa los JSON de cierre (pueden ser null en sesiones abiertas/reabiertas).
+  const parseJson = <T>(v: unknown): T | null => {
+    if (v == null) return null;
+    try { return v as T; }
+    catch { return null; }
+  };
+
+  const closingAmounts = parseJson<Record<PaymentMethod, number>>(session.closingAmounts);
+  const expectedAmounts = parseJson<Record<PaymentMethod, number>>(session.expectedAmounts);
+  const diffByMethod = parseJson<Record<PaymentMethod, number>>(session.diffByMethod);
+
   return {
     session,
     sales: sales.map((s) => ({ ...s, total: Number(s.total) })),
     purchases: purchases.map((p) => ({ ...p, total: Number(p.total) })),
+    closingAmounts,
+    expectedByMethod: expectedAmounts,
+    diffByMethod,
     movimientos: {
       ingresoCash: Number(mov.ingresoCash),
       egresoCash: Number(mov.egresoCash),
       ingresoElectronic: Number(mov.ingresoElectronic),
       egresoElectronic: Number(mov.egresoElectronic),
+      // Per-method
+      ingresoByMethod: cut.movimientosIngresoByMethod,
+      egresoByMethod: cut.movimientosEgresoByMethod,
     },
+    movimientosPorMotivo: movPorMotivo,
     inventory,
     inventoryAdjusted: session.inventoryAdjusted ?? false,
   };
