@@ -110,8 +110,11 @@ export async function deleteCaja(id: string, storeId: string) {
     );
   }
 
-  await prisma.caja.delete({ where: { id } });
-  return { id, message: 'Caja eliminada correctamente' };
+  await prisma.caja.update({
+    where: { id },
+    data: { isActive: false },
+  });
+  return { id, message: 'Caja desactivada correctamente' };
 }
 
 // Devuelve la caja asignada a un usuario (si la tienda usa control de cajas).
