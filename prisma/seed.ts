@@ -445,7 +445,7 @@ async function main() {
         name: 'Combo Atún + Pan Francés',
         description: 'Pack a precio especial.',
         type: 'COMBO',
-        config: { comboPrice: 2000 },
+        config: { comboPrice: 30 },
           startsAt: new Date('2026-01-01T00:00:00Z'),
           endsAt: new Date('2027-12-31T23:59:59Z'),
           isActive: true,

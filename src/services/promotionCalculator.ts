@@ -409,14 +409,16 @@ type Candidate = {
     if (discountedAmount >= originalAmount) continue;
     const saved = round2(originalAmount - discountedAmount);
 
-    // Aplica el descuento a la primera unidad de cada producto del pack
-    // (el resto se cobra a precio normal).
-    const perProductSavings = saved / present.length;
+    // Distribuye el ahorro PROPORCIONAL al precio original de cada producto
+    // del combo (no a partes iguales). Así el precio del combo se reparte
+    // justamente: el producto más caro asume más ahorro.
     for (const l of present) {
       const idx = lines.findIndex((x) => x.productId === l.productId);
       if (idx === -1) continue;
       const lineOriginalSubtotal = resolved[idx].originalUnitPrice * l.quantity;
-      const newSubtotal = Math.max(0, lineOriginalSubtotal - perProductSavings);
+      const proportion = originalAmount > 0 ? lineOriginalSubtotal / originalAmount : 0;
+      const lineSavings = round2(saved * proportion);
+      const newSubtotal = Math.max(0, lineOriginalSubtotal - lineSavings);
       const newUnitPrice = l.quantity > 0 ? newSubtotal / l.quantity : resolved[idx].unitPrice;
       resolved[idx].unitPrice = round2(newUnitPrice);
       resolved[idx].subtotal = round2(newSubtotal);
@@ -431,15 +433,16 @@ type Candidate = {
   const subtotalAfterLinePromos = round2(resolved.reduce((a, r) => a + r.subtotal, 0));
 
   // --- 4. Resolver TIERED_BY_AMOUNT ---
+  // El umbral se evalúa sobre el subtotal ORIGINAL (sin promos de línea) porque
+  // la promo de volumen rewarding based on how much the customer spends.
   let tierDiscount = 0;
   for (const tier of tierPromos) {
     const cfg = tier.config as TieredByAmountConfig;
     const sortedTiers = [...cfg.tiers].sort((a, b) => b.minAmount - a.minAmount);
-    const match = sortedTiers.find((t) => subtotalAfterLinePromos >= t.minAmount);
+    const match = sortedTiers.find((t) => subtotal >= t.minAmount);
     if (!match) continue;
-    tierDiscount = round2(subtotalAfterLinePromos * (match.percent / 100));
-    break; // toma la primera promo tier aplicable (las demás promos tier se
-    // podrían combinar, pero por simplicidad solo aplicamos una).
+    tierDiscount = round2(subtotal * (match.percent / 100));
+    break;
   }
 
   const total = round2(subtotalAfterLinePromos - tierDiscount);
