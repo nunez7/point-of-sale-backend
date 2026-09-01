@@ -3,6 +3,7 @@ import { Prisma, PaymentMethod } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 import { SaleItemInput } from '../types';
 import { mexicoStartOfDay, mexicoEndOfDay } from '../utils/dates';
+import { resolvePromotionsForSale, applyPromotionResolutionToSaleTx, revertPromotionApplicationsForSale } from './promotion.service';
 
 export interface CreateSaleInput {
   storeId: string;
@@ -104,6 +105,7 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
       quantity: number;
       unidad: string;
       unitPrice: number;
+      originalUnitPrice: number;
       costPrice: Prisma.Decimal;
       unitProfit: Prisma.Decimal;
     }> = [];
@@ -162,23 +164,78 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
         quantity: item.quantity,
         unidad: etiquetaUnidad(product.unidadVenta),
         unitPrice: item.unitPrice,
+        originalUnitPrice: item.unitPrice,
         costPrice,
         unitProfit,
       });
     }
 
-    const discountDecimal = new Prisma.Decimal(input.discount).div(100);
-    const discountAmount = subtotal.mul(discountDecimal);
-    const total = subtotal.minus(discountAmount);
+    // Resolver promociones aplicables a nivel de línea.
+    const promoResolution = await resolvePromotionsForSale(
+      tx,
+      input.storeId,
+      preparedItems.map((it) => ({
+        productId: it.productId,
+        unitPrice: it.unitPrice,
+        quantity: it.quantity,
+        categoryId: productMap.get(it.productId)?.categoryId ?? null,
+        costPrice: Number(it.costPrice),
+      }))
+    );
+
+    // Sobreescribe unitPrice con el precio post-promo y guarda el original.
+    if (promoResolution.applied.length > 0) {
+      for (let i = 0; i < preparedItems.length; i++) {
+        const resolved = promoResolution.lines[i];
+        if (resolved.promotionIds.length === 0) continue;
+        preparedItems[i].unitPrice = resolved.unitPrice;
+      }
+    }
+
+    // Recalcula subtotal con precios post-promo por línea.
+    let subtotalAfterPromos = new Prisma.Decimal(0);
+    for (const it of preparedItems) {
+      subtotalAfterPromos = subtotalAfterPromos.plus(
+        new Prisma.Decimal(it.unitPrice).mul(it.quantity)
+      );
+    }
+
+    // El descuento de venta es un monto fijo en COP (no porcentaje) aplicado
+    // sobre el subtotal con promos de línea. Se limita al subtotal para no
+    // generar totales negativos.
+    const discountDecimal = new Prisma.Decimal(
+      Math.min(input.discount, subtotalAfterPromos.toNumber())
+    );
+    const discountAmount = discountDecimal;
+    const total = subtotalAfterPromos.minus(discountAmount);
+
+    // Para reportes: subtotal = precios normales, discountAmount incluye el
+    // descuento global; el "ahorro" por promos se guarda en
+    // PromotionApplication. Aquí guardamos subtotal normal para que el
+    // reporte de ventas (CorteCaja) siga funcionando con la diferencia.
+    const savedByPromos = subtotal.minus(subtotalAfterPromos);
+    const saleSubtotal = subtotal; // precios normales
+    const saleDiscount = discountAmount.plus(savedByPromos);
 
     let totalProfit = new Prisma.Decimal(0);
-    for (const it of preparedItems) {
-      // discount prorated across items for accurate profit
-      const itemSubtotal = new Prisma.Decimal(it.unitPrice).mul(it.quantity);
-      const itemDiscount = itemSubtotal.mul(discountDecimal);
-      const itemNet = itemSubtotal.minus(itemDiscount);
-      const itemProfit = itemNet.minus(it.costPrice.mul(it.quantity));
-      totalProfit = totalProfit.plus(itemProfit);
+    if (subtotalAfterPromos.gt(0) && discountAmount.gt(0)) {
+      // Prorratea el descuento global entre las líneas según su peso en el
+      // subtotal post-promo. Esto preserva proporciones de margen por línea.
+      for (const it of preparedItems) {
+        const itemSubtotal = new Prisma.Decimal(it.unitPrice).mul(it.quantity);
+        const proportion = itemSubtotal.div(subtotalAfterPromos);
+        const itemDiscount = discountAmount.mul(proportion);
+        const itemNet = itemSubtotal.minus(itemDiscount);
+        const itemProfit = itemNet.minus(it.costPrice.mul(it.quantity));
+        totalProfit = totalProfit.plus(itemProfit);
+      }
+    } else {
+      for (const it of preparedItems) {
+        const itemProfit = new Prisma.Decimal(it.unitPrice)
+          .minus(it.costPrice)
+          .mul(it.quantity);
+        totalProfit = totalProfit.plus(itemProfit);
+      }
     }
 
     const saleNumber = await generateSaleNumber(tx, input.storeId, store.code);
@@ -190,8 +247,8 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
         saleNumber,
         storeId: input.storeId,
         userId: input.userId,
-        subtotal,
-        discount: discountAmount,
+        subtotal: saleSubtotal,
+        discount: saleDiscount,
         total,
         profit: totalProfit,
         profitMargin: total.gt(0) ? totalProfit.div(total).mul(100) : new Prisma.Decimal(0),
@@ -206,6 +263,8 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
             quantity: it.quantity,
             unidad: it.unidad,
             unitPrice: it.unitPrice,
+            originalUnitPrice:
+              it.unitPrice !== it.originalUnitPrice ? it.originalUnitPrice : null,
             costPrice: it.costPrice,
             profit: new Prisma.Decimal(it.unitPrice)
               .minus(it.costPrice)
@@ -234,6 +293,11 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
       }
     }
 
+    // Persistir aplicaciones de promoción (incrementa usesCount atómicamente).
+    if (promoResolution.applied.length > 0) {
+      await applyPromotionResolutionToSaleTx(tx, sale.id, input.storeId, promoResolution);
+    }
+
     // Audit log
     await tx.auditLog.create({
       data: {
@@ -249,6 +313,9 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
           paymentMethod: input.paymentMethod,
           status: isPending ? 'PENDING' : 'COMPLETED',
           ...(input.clienteId ? { clienteId: input.clienteId } : {}),
+          ...(promoResolution.applied.length > 0
+            ? { promotions: promoResolution.applied.length, savedByPromos: savedByPromos.toString() }
+            : {}),
         },
       },
     });
@@ -278,6 +345,7 @@ function serializeSale<
     items: Array<{
       quantity: Prisma.Decimal | number;
       unitPrice: Prisma.Decimal | number;
+      originalUnitPrice?: Prisma.Decimal | number | null;
       costPrice: Prisma.Decimal | number;
       profit: Prisma.Decimal | number;
     }>;
@@ -295,6 +363,8 @@ function serializeSale<
       ...it,
       quantity: Number(it.quantity),
       unitPrice: Number(it.unitPrice),
+      originalUnitPrice:
+        it.originalUnitPrice == null ? null : Number(it.originalUnitPrice),
       costPrice: Number(it.costPrice),
       profit: Number(it.profit),
       productName:
@@ -392,6 +462,9 @@ export async function cancelSale(
         update: { quantity: { increment: item.quantity } },
       });
     }
+
+    // Revierte promociones aplicadas a la venta (decrementa usesCount).
+    await revertPromotionApplicationsForSale(tx, id);
 
     const canceled = await tx.sale.update({
       where: { id },

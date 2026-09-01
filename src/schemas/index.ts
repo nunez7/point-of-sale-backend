@@ -79,7 +79,7 @@ export const saleItemSchema = z.object({
 export const saleSchema = z.object({
   items: z.array(saleItemSchema).min(1, 'Debe haber al menos un item'),
   paymentMethod: paymentMethodSchema,
-  discount: z.number().min(0, 'El descuento no puede ser negativo').max(100, 'El descuento no puede ser mayor a 100%').default(0),
+  discount: z.number().min(0, 'El descuento no puede ser negativo').default(0),
   storeId: z.string().min(1),
   // COMPLETED = venta inmediata (descuenta inventario); PENDING = pedido
   // (no descuenta inventario hasta confirmarse).

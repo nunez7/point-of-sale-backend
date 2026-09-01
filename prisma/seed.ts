@@ -351,6 +351,162 @@ async function main() {
     await crearProducto({ ...p, categoryIndex: 0 });
   }
 
+  // ─── PROMOCIONES DE DEMO ──────────────────────────────────
+  const lacteosCategory = categories[4];
+  const bebidasCategory = categories[3];
+  const lecheEntera = await prisma.product.findUnique({ where: { sku: 'LAC-001' } });
+  const aguaBotella = await prisma.product.findUnique({ where: { sku: 'BEB-001' } });
+  const chocolate = await prisma.product.findUnique({ where: { sku: 'LAC-011' } });
+  const ponymal = await prisma.product.findUnique({ where: { sku: 'ABAR-004' } });
+  const atun = await prisma.product.findUnique({ where: { sku: 'ABAR-010' } });
+
+  // Promo 1: 20% en Lácteos los viernes
+  if (lacteosCategory) {
+    await prisma.promotion.upsert({
+      where: { id: 'demo-promo-lacteos-viernes' },
+      update: {},
+      create: {
+        id: 'demo-promo-lacteos-viernes',
+        storeId: store.id,
+        name: '20% en Lácteos los viernes',
+        description: 'Descuento del 20% en todos los productos de la categoría Lácteos, válido los viernes.',
+        type: 'CATEGORY_PERCENTAGE',
+        config: { percent: 20 },
+        startsAt: new Date('2026-01-01T00:00:00Z'),
+        endsAt: new Date('2027-12-31T23:59:59Z'),
+        weekdays: ['FRIDAY'],
+        isActive: true,
+        priority: 0,
+        createdById: adminUser.id,
+        items: { create: [{ categoryId: lacteosCategory.id, productId: null }] },
+      },
+    });
+  }
+
+  // Promo 2: 2x1 en Helado Chocolate
+  if (chocolate) {
+    await prisma.promotion.upsert({
+      where: { id: 'demo-promo-helado-2x1' },
+      update: {},
+      create: {
+        id: 'demo-promo-helado-2x1',
+        storeId: store.id,
+        name: '2x1 en Helado Chocolate',
+        description: 'Lleva 2 y paga 1.',
+        type: 'N_FOR_FREE',
+        config: { buyQuantity: 2, freeQuantity: 1 },
+        startsAt: new Date('2026-01-01T00:00:00Z'),
+        endsAt: new Date('2027-12-31T23:59:59Z'),
+        isActive: true,
+        priority: 0,
+        createdById: adminUser.id,
+        items: { create: [{ productId: chocolate.id, categoryId: null }] },
+      },
+    });
+  }
+
+  // Promo 3: 15% en Agua Botella y Pony Malta
+  if (aguaBotella && ponymal) {
+    await prisma.promotion.upsert({
+      where: { id: 'demo-promo-bebidas-15' },
+      update: {},
+      create: {
+        id: 'demo-promo-bebidas-15',
+        storeId: store.id,
+        name: '15% en Agua y Pony Malta',
+        description: 'Descuento del 15% en productos seleccionados.',
+        type: 'PERCENTAGE',
+        config: { percent: 15 },
+        startsAt: new Date('2026-01-01T00:00:00Z'),
+        endsAt: new Date('2027-12-31T23:59:59Z'),
+        isActive: true,
+        priority: 0,
+        createdById: adminUser.id,
+        items: {
+          create: [
+            { productId: aguaBotella.id, categoryId: null },
+            { productId: ponymal.id, categoryId: null },
+          ],
+        },
+      },
+    });
+  }
+
+  // Promo 4: Combo Atún + Pan Francés
+  if (atun) {
+    const panFrances = await prisma.product.findUnique({ where: { sku: 'ABAR-015' } });
+    if (panFrances) {
+      await prisma.promotion.upsert({
+        where: { id: 'demo-promo-combo-atun' },
+        update: {},
+      create: {
+        id: 'demo-promo-combo-atun',
+        storeId: store.id,
+        name: 'Combo Atún + Pan Francés',
+        description: 'Pack a precio especial.',
+        type: 'COMBO',
+        config: { comboPrice: 2000 },
+          startsAt: new Date('2026-01-01T00:00:00Z'),
+          endsAt: new Date('2027-12-31T23:59:59Z'),
+          isActive: true,
+          priority: 0,
+          createdById: adminUser.id,
+          items: {
+            create: [
+              { productId: atun.id, categoryId: null, comboPrice: null },
+              { productId: panFrances.id, categoryId: null, comboPrice: null },
+            ],
+          },
+        },
+      });
+    }
+  }
+
+  // Promo 5: Volumen — 10% si subtotal ≥ $100,000
+  await prisma.promotion.upsert({
+    where: { id: 'demo-promo-volumen' },
+    update: {},
+    create: {
+      id: 'demo-promo-volumen',
+      storeId: store.id,
+      name: '10% si subtotal ≥ $100,000',
+      description: 'Descuento automático sobre el subtotal del carrito.',
+      type: 'TIERED_BY_AMOUNT',
+      config: { tiers: [{ minAmount: 100000, percent: 10 }] },
+      startsAt: new Date('2026-01-01T00:00:00Z'),
+      endsAt: new Date('2027-12-31T23:59:59Z'),
+      isActive: true,
+      priority: 0,
+      createdById: adminUser.id,
+      items: { create: [] },
+    },
+  });
+
+  // Promo 6: $1,000 de descuento directo en Leche Entera
+  if (lecheEntera) {
+    await prisma.promotion.upsert({
+      where: { id: 'demo-promo-leche-directo' },
+      update: {},
+      create: {
+        id: 'demo-promo-leche-directo',
+        storeId: store.id,
+        name: '$1,000 OFF en Leche Entera',
+        description: 'Descuento directo por unidad.',
+        type: 'DIRECT_AMOUNT',
+        config: { amount: 10 },
+        startsAt: new Date('2026-01-01T00:00:00Z'),
+        endsAt: new Date('2027-12-31T23:59:59Z'),
+        isActive: true,
+        priority: 0,
+        createdById: adminUser.id,
+        items: { create: [{ productId: lecheEntera.id, categoryId: null }] },
+      },
+    });
+  }
+
+  void lacteosCategory;
+  void bebidasCategory;
+
   console.log('Seed completado con 100 productos:');
   console.log(`  Tienda: ${store.name} (${store.code})`);
   console.log(`  Admin: admin@servicaja.com / admin123`);
@@ -363,6 +519,7 @@ async function main() {
   console.log(`  Higiene: ${higiene.length} productos`);
   console.log(`  General: ${general.length} productos`);
   console.log(`  TOTAL: ${lacteos.length + bebidas.length + alimentos.length + abarrotes.length + limpieza.length + higiene.length + general.length} productos`);
+  console.log(`  Promociones: 6 demo`);
 }
 
 main()
