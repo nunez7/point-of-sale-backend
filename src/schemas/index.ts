@@ -654,3 +654,115 @@ export const cajaMovimientoCreateV2Schema = z.object({
   motivoId: z.string().min(1).optional().nullable(),
   motivoTexto: z.string().max(500, 'Máximo 500 caracteres').optional().nullable(),
 });
+
+// ---------- Soporte técnico (tickets) ----------
+
+export const ticketStatusSchema = z.enum([
+  'OPEN',
+  'ANALYSIS',
+  'REVIEW',
+  'CORRECTION',
+  'SOLVED',
+  'CLOSED',
+  'REJECTED',
+]);
+
+export const ticketPrioritySchema = z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']);
+
+export const ticketModuleSchema = z.enum([
+  'INVENTORY',
+  'SALES',
+  'INVOICES',
+  'CASHREGISTERS',
+  'PRODUCTS',
+  'ORDERS',
+  'PROMOTIONS',
+  'USERS',
+  'STORES',
+  'REPORTS',
+  'CANCELLATIONS',
+]);
+
+export const ticketAttachmentSchema = z.object({
+  fileName: z.string().min(1, 'El nombre del archivo es requerido').max(200),
+  mimeType: z.string().min(1).max(100),
+  data: z
+    .string()
+    .min(1, 'El contenido del archivo es requerido')
+    // 5MB aprox en base64 = ~6.85MB string.
+    .max(7_000_000, 'El archivo no puede pesar más de 5MB'),
+});
+
+export const createTicketSchema = z.object({
+  ticketModule: ticketModuleSchema,
+  subject: z.string().min(1, 'El asunto es requerido').max(120, 'Máximo 120 caracteres'),
+  description: z
+    .string()
+    .min(1, 'La descripción es requerida')
+    .max(255, 'Máximo 255 caracteres'),
+  priority: ticketPrioritySchema.default('MEDIUM'),
+  attachment: ticketAttachmentSchema.optional().nullable(),
+});
+
+export const updateTicketStatusSchema = z.object({
+  status: ticketStatusSchema,
+  comment: z
+    .string()
+    .max(1000, 'Máximo 1000 caracteres')
+    .optional()
+    .nullable(),
+});
+
+export const addTicketCommentSchema = z.object({
+  content: z.string().min(1, 'El comentario es requerido').max(1000, 'Máximo 1000 caracteres'),
+});
+
+export const solveTicketSchema = z.object({
+  solutionComment: z
+    .string()
+    .max(1000, 'Máximo 1000 caracteres')
+    .optional()
+    .nullable(),
+  solutionEvidence: ticketAttachmentSchema.optional().nullable(),
+});
+
+export const closeTicketSchema = z.object({
+  rating: z
+    .number()
+    .int('La calificación debe ser un entero')
+    .min(1, 'La calificación mínima es 1')
+    .max(5, 'La calificación máxima es 5'),
+  ratingComment: z
+    .string()
+    .max(1000, 'Máximo 1000 caracteres')
+    .optional()
+    .nullable(),
+});
+
+export const rejectTicketSchema = z.object({
+  rejectReason: z
+    .string()
+    .min(1, 'El motivo del rechazo es requerido')
+    .max(1000, 'Máximo 1000 caracteres'),
+});
+
+export const ticketsQuerySchema = z.object({
+  status: ticketStatusSchema.optional(),
+  ticketModule: ticketModuleSchema.optional(),
+  priority: ticketPrioritySchema.optional(),
+  storeId: z.string().optional(),
+  assignedToSoporteId: z.string().optional(),
+  search: z.string().max(120).optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha inicial debe tener formato YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
+    .optional(),
+});
+
+export const ticketConfigSchema = z.object({
+  soporteUserId: z.string().min(1).nullable().optional(),
+});

@@ -41,6 +41,7 @@ export const ROLE_HIERARCHY: Record<Role, number> = {
   VENDEDOR: 1,
   GERENTE: 2,
   ADMIN: 3,
+  SOPORTE: 1,
 };
 
 export type { Role, PaymentMethod };
