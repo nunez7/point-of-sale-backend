@@ -881,8 +881,10 @@ model Ticket {
   priority    TicketPriority @default(MEDIUM)
   status      TicketStatus   @default(OPEN)
 
-  solutionEvidence  String?   @db.Text  // base64 encoded file
-  solutionComment   String?
+  solutionEvidence         String?   @db.Text  // base64 encoded file
+  solutionEvidenceFileName String?
+  solutionEvidenceMimeType String?
+  solutionComment         String?
 
   rating          Int?
   ratingComment   String?

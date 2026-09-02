@@ -136,6 +136,8 @@ function serializeTicketDetail(ticket: TicketDetailWithRelations) {
     priority: ticket.priority,
     status: ticket.status,
     solutionEvidence: ticket.solutionEvidence,
+    solutionEvidenceFileName: ticket.solutionEvidenceFileName,
+    solutionEvidenceMimeType: ticket.solutionEvidenceMimeType,
     solutionComment: ticket.solutionComment,
     rating: ticket.rating,
     ratingComment: ticket.ratingComment,
@@ -422,21 +424,17 @@ export async function solveTicket(
       assignedToSoporteId: ticket.assignedToSoporteId ?? actor.id,
       solutionComment: input.solutionComment ?? null,
       solutionEvidence: input.solutionEvidence.data,
-      // Almacenamos metadatos de la evidencia como adjunto para descarga.
-      attachments: {
-        create: {
-          fileName: input.solutionEvidence.fileName,
-          mimeType: input.solutionEvidence.mimeType,
-          data: input.solutionEvidence.data,
-        },
-      },
+      solutionEvidenceFileName: input.solutionEvidence.fileName,
+      solutionEvidenceMimeType: input.solutionEvidence.mimeType,
       // Registrar la solución como actividad en el hilo de comentarios.
+      // Se marca con 🔒 al inicio para que el frontend pueda distinguirlo
+      // y mostrar la evidencia adjunta dentro de la propia burbuja.
       comments: {
         create: {
           userId: actor.id,
           content: input.solutionComment
-            ? `✅ Solución aplicada: ${input.solutionComment}`
-            : `✅ Ticket marcado como solucionado (evidencia: ${input.solutionEvidence.fileName})`,
+            ? `🔒 Solución aplicada: ${input.solutionComment}`
+            : `🔒 Ticket marcado como solucionado`,
         },
       },
     },
@@ -536,6 +534,8 @@ export async function rejectTicket(
       // Limpiamos la evidencia previa para que soporte suba una nueva al
       // volver a marcar como SOLVED.
       solutionEvidence: null,
+      solutionEvidenceFileName: null,
+      solutionEvidenceMimeType: null,
       solutionComment: null,
       comments: {
         create: {
