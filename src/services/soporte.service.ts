@@ -3,6 +3,16 @@ import { Prisma, TicketStatus, Role } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 import { logger } from '../config/logger';
 
+const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
+  [TicketStatus.OPEN]: 'Abierto',
+  [TicketStatus.ANALYSIS]: 'En análisis',
+  [TicketStatus.REVIEW]: 'En revisión',
+  [TicketStatus.CORRECTION]: 'En corrección',
+  [TicketStatus.SOLVED]: 'Solucionado',
+  [TicketStatus.CLOSED]: 'Cerrado',
+  [TicketStatus.REJECTED]: 'Rechazado',
+};
+
 export interface CreateTicketInput {
   ticketModule: string;
   subject: string;
@@ -321,13 +331,16 @@ export async function updateStatus(
       status: nextStatus,
       // Auto-asignar al soporte que mueve el ticket si aún está sin asignar.
       assignedToSoporteId: ticket.assignedToSoporteId ?? actor.id,
-      ...(comment
-        ? {
-            comments: {
-              create: { userId: actor.id, content: comment },
-            },
-          }
-        : {}),
+      // Registrar el cambio de estado en el hilo de actividad, con o sin
+      // comentario. Esto asegura que el timeline siempre refleje qué pasó.
+      comments: {
+        create: {
+          userId: actor.id,
+          content: comment
+            ? `Cambio de estado → ${TICKET_STATUS_LABELS[nextStatus]}: ${comment}`
+            : `Cambio de estado → ${TICKET_STATUS_LABELS[nextStatus]}`,
+        },
+      },
     },
     include: TICKET_INCLUDE,
   });
@@ -417,6 +430,15 @@ export async function solveTicket(
           data: input.solutionEvidence.data,
         },
       },
+      // Registrar la solución como actividad en el hilo de comentarios.
+      comments: {
+        create: {
+          userId: actor.id,
+          content: input.solutionComment
+            ? `✅ Solución aplicada: ${input.solutionComment}`
+            : `✅ Ticket marcado como solucionado (evidencia: ${input.solutionEvidence.fileName})`,
+        },
+      },
     },
     include: TICKET_INCLUDE,
   });
@@ -458,6 +480,15 @@ export async function closeTicket(
       status: TicketStatus.CLOSED,
       rating: input.rating,
       ratingComment: input.ratingComment ?? null,
+      // Registrar el cierre del ticket en el hilo de actividad.
+      comments: {
+        create: {
+          userId: actor.id,
+          content: input.ratingComment
+            ? `✅ Ticket cerrado con calificación ${input.rating}/5: ${input.ratingComment}`
+            : `✅ Ticket cerrado con calificación ${input.rating}/5`,
+        },
+      },
     },
     include: TICKET_INCLUDE,
   });
