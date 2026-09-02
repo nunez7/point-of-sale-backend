@@ -48,7 +48,11 @@ export async function buscarVentaPorNumero(saleNumber: string, storeId: string) 
 
   const sale = await prisma.sale.findFirst({
     where: { saleNumber: venta, storeId },
-    include: { items: { select: { quantity: true } } },
+    include: {
+      items: {
+        include: { product: { select: { name: true } } },
+      },
+    },
   });
   if (!sale) {
     throw ApiError.notFound(
@@ -72,6 +76,11 @@ export async function buscarVentaPorNumero(saleNumber: string, storeId: string) 
     articulos: sale.items.reduce((acc, item) => acc + Number(item.quantity), 0),
     estado: sale.status,
     factura,
+    items: sale.items.map((it) => ({
+      quantity: Number(it.quantity),
+      unitPrice: Number(it.unitPrice),
+      product: { name: it.product.name },
+    })),
   };
 }
 
