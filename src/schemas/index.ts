@@ -197,11 +197,11 @@ export const USOS_CFDI = [
 ] as const;
 
 export const regimenFiscalSchema = z.enum(REGIMENES_FISCALES, {
-  errorMap: () => ({ message: 'Régimen fiscal inválido' }),
+  error: 'Régimen fiscal inválido',
 });
 
 export const usoCfdiSchema = z.enum(USOS_CFDI, {
-  errorMap: () => ({ message: 'Uso del CFDI inválido' }),
+  error: 'Uso del CFDI inválido',
 });
 
 export const rfcSchema = z
@@ -399,14 +399,14 @@ export const facturaQuerySchema = z.object({
 
 export const cancelEntitySchema = z.object({
   entityType: z.enum(['SALE', 'FACTURA', 'SUPPLIER_TRANSACTION'], {
-    errorMap: () => ({ message: 'Tipo de entidad inválido. Use: SALE, FACTURA o SUPPLIER_TRANSACTION' }),
+    error: 'Tipo de entidad inválido. Use: SALE, FACTURA o SUPPLIER_TRANSACTION',
   }),
   entityCode: z.string().min(1, 'El código o número del documento es requerido'),
 });
 
 export const cancelConfirmSchema = z.object({
   entityType: z.enum(['SALE', 'FACTURA', 'SUPPLIER_TRANSACTION'], {
-    errorMap: () => ({ message: 'Tipo de entidad inválido. Use: SALE, FACTURA o SUPPLIER_TRANSACTION' }),
+    error: 'Tipo de entidad inválido. Use: SALE, FACTURA o SUPPLIER_TRANSACTION',
   }),
   entityId: z.string().min(1, 'El ID del documento es requerido'),
   cancellationReasonId: z.string().min(1, 'El motivo de cancelación es requerido'),
@@ -446,7 +446,7 @@ export const cancelationsQuerySchema = z.object({
 export const movementReasonSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido').max(80, 'Máximo 80 caracteres'),
   tipo: z.nativeEnum(MovementTipo, {
-    errorMap: () => ({ message: 'Tipo de movimiento inválido' }),
+    error: 'Tipo de movimiento inválido',
   }),
   departamento: z.string().max(50, 'Máximo 50 caracteres').optional().nullable(),
   isActive: z.boolean().optional(),
@@ -579,7 +579,7 @@ export const cajaSessionQuerySchema = z.object({
 
 export const cajaMovimientoSchema = z.object({
   tipo: z.enum(['INGRESO', 'EGRESO'], {
-    errorMap: () => ({ message: 'El tipo debe ser INGRESO o EGRESO' }),
+    error: 'El tipo debe ser INGRESO o EGRESO',
   }),
   metodo: z.enum(['CASH', 'CARD', 'TRANSFER']).default('CASH'),
   monto: z.number().positive('El monto debe ser mayor a cero'),

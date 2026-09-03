@@ -20,7 +20,7 @@ export const validate =
     }
 
     if (source === 'body') req.body = result.data;
-    else if (source === 'query') req.query = result.data;
+    else if (source === 'query') req.query = result.data as Request['query'];
     else req.params = result.data as Request['params'];
 
     return next();
