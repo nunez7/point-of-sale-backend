@@ -613,7 +613,6 @@ export const autoCloseConfigSchema = z.object({
     .nullable(),
   autoCloseDays: z
     .array(z.string().regex(/^[0-6]$/))
-    .min(1, 'Seleccione al menos un día')
     .max(7)
     .optional(),
 });
