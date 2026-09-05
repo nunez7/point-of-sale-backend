@@ -13,7 +13,12 @@ export const createTicket = asyncAuthHandler(async (req: AuthedRequest, res: Res
       'FORBIDDEN_CREATE_TICKET'
     );
   }
-  const ticket = await soporteService.createTicket(user.storeId, user.id, req.body);
+  const ticket = await soporteService.createTicket(
+    user.storeId,
+    user.id,
+    req.body,
+    req.headers['x-socket-id']
+  );
   res.status(201).json({ ticket, message: 'Ticket creado correctamente' });
 });
 
@@ -40,7 +45,8 @@ export const updateStatus = asyncAuthHandler(async (req: AuthedRequest, res: Res
     req.params.id,
     user,
     req.body.status,
-    req.body.comment
+    req.body.comment,
+    req.headers['x-socket-id']
   );
   res.json({ ticket, message: 'Estado actualizado' });
 });
@@ -50,26 +56,42 @@ export const addComment = asyncAuthHandler(async (req: AuthedRequest, res: Respo
   const ticket = await soporteService.addComment(
     req.params.id,
     user,
-    req.body.content
+    req.body.content,
+    req.headers['x-socket-id']
   );
   res.json({ ticket, message: 'Comentario agregado' });
 });
 
 export const solveTicket = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
   const user = req.user!;
-  const ticket = await soporteService.solveTicket(req.params.id, user, req.body);
+  const ticket = await soporteService.solveTicket(
+    req.params.id,
+    user,
+    req.body,
+    req.headers['x-socket-id']
+  );
   res.json({ ticket, message: 'Ticket marcado como solucionado' });
 });
 
 export const closeTicket = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
   const user = req.user!;
-  const ticket = await soporteService.closeTicket(req.params.id, user, req.body);
+  const ticket = await soporteService.closeTicket(
+    req.params.id,
+    user,
+    req.body,
+    req.headers['x-socket-id']
+  );
   res.json({ ticket, message: 'Ticket cerrado' });
 });
 
 export const rejectTicket = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
   const user = req.user!;
-  const ticket = await soporteService.rejectTicket(req.params.id, user, req.body);
+  const ticket = await soporteService.rejectTicket(
+    req.params.id,
+    user,
+    req.body,
+    req.headers['x-socket-id']
+  );
   res.json({ ticket, message: 'Cierre rechazado' });
 });
 

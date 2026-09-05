@@ -2,6 +2,14 @@ import { prisma } from '../config/prisma';
 import { Prisma, TicketStatus, Role } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 import { logger } from '../config/logger';
+import {
+  emitTicketCreated,
+  emitTicketStatusChanged,
+  emitTicketCommentAdded,
+  emitTicketSolved,
+  emitTicketClosed,
+  emitTicketRejected,
+} from '../socket/ticketEvents';
 
 const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   [TicketStatus.OPEN]: 'Abierto',
@@ -183,7 +191,8 @@ async function generateTicketFolio(storeId: string): Promise<string> {
 export async function createTicket(
   storeId: string,
   userId: string,
-  input: CreateTicketInput
+  input: CreateTicketInput,
+  exceptSocketId?: string | string[]
 ) {
   // Auto-asignar al soporte configurado en la tienda si existe.
   const config = await prisma.ticketConfig.findUnique({ where: { storeId } });
@@ -217,6 +226,29 @@ export async function createTicket(
   logger.info(
     `Ticket creado: ${ticket.folio} por usuario ${userId} en tienda ${storeId}`
   );
+
+  // Notificar al personal SOPORTE de la tienda sobre el nuevo ticket.
+  const creator = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, role: true },
+  });
+  if (creator) {
+    emitTicketCreated(
+      {
+        id: ticket.id,
+        folio: ticket.folio,
+        storeId: ticket.storeId,
+        subject: ticket.subject,
+        status: ticket.status,
+        ticketModule: ticket.ticketModule,
+        priority: ticket.priority,
+        assignedToSoporteId: ticket.assignedToSoporteId,
+        assignedToSoporteName: ticket.assignedToSoporte?.name ?? null,
+      },
+      creator,
+      exceptSocketId
+    );
+  }
 
   return serializeTicket(ticket);
 }
@@ -291,7 +323,8 @@ export async function updateStatus(
   ticketId: string,
   actor: { id: string; role: string; storeId: string },
   status: string,
-  comment?: string | null
+  comment?: string | null,
+  exceptSocketId?: string | string[]
 ) {
   const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
   if (!ticket) {
@@ -351,13 +384,32 @@ export async function updateStatus(
     `Ticket ${ticket.folio} cambió a ${nextStatus} por soporte ${actor.id}`
   );
 
+  // Notificar al creador del ticket y al resto de la tienda sobre el cambio.
+  const triggeredBy = {
+    id: actor.id,
+    name: updated.assignedToSoporte?.name ?? 'Soporte',
+    role: actor.role,
+  };
+  emitTicketStatusChanged(
+    {
+      id: updated.id,
+      folio: updated.folio,
+      storeId: updated.storeId,
+      subject: updated.subject,
+      status: updated.status,
+    },
+    triggeredBy,
+    exceptSocketId
+  );
+
   return serializeTicket(updated);
 }
 
 export async function addComment(
   ticketId: string,
   actor: { id: string; role: string; storeId: string },
-  content: string
+  content: string,
+  exceptSocketId?: string | string[]
 ) {
   const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
   if (!ticket) {
@@ -375,13 +427,40 @@ export async function addComment(
     );
   }
 
-  await prisma.ticketComment.create({
+  const createdComment = await prisma.ticketComment.create({
     data: {
       ticketId,
       userId: actor.id,
       content,
     },
+    include: {
+      user: { select: { id: true, name: true, email: true, role: true } },
+    },
   });
+
+  // Notificar al creador del ticket y al resto de la tienda sobre el nuevo comentario.
+  const author = await prisma.user.findUnique({
+    where: { id: actor.id },
+    select: { id: true, name: true, role: true },
+  });
+  if (author) {
+    emitTicketCommentAdded(
+      {
+        id: ticket.id,
+        folio: ticket.folio,
+        storeId: ticket.storeId,
+        subject: ticket.subject,
+        status: ticket.status,
+      },
+      {
+        id: createdComment.id,
+        content: createdComment.content,
+        authorName: createdComment.user.name,
+      },
+      author,
+      exceptSocketId
+    );
+  }
 
   return getTicket(ticketId, actor.role, actor.storeId);
 }
@@ -389,7 +468,8 @@ export async function addComment(
 export async function solveTicket(
   ticketId: string,
   actor: { id: string; role: string; storeId: string },
-  input: SolveTicketInput
+  input: SolveTicketInput,
+  exceptSocketId?: string | string[]
 ) {
   if (actor.role !== Role.SOPORTE) {
     throw ApiError.forbidden(
@@ -443,13 +523,33 @@ export async function solveTicket(
 
   logger.info(`Ticket ${ticket.folio} marcado como SOLVED por soporte ${actor.id}`);
 
+  // Notificar al creador del ticket y al resto de la tienda.
+  const triggeredBy = {
+    id: actor.id,
+    name: updated.assignedToSoporte?.name ?? 'Soporte',
+    role: actor.role,
+  };
+  emitTicketSolved(
+    {
+      id: updated.id,
+      folio: updated.folio,
+      storeId: updated.storeId,
+      subject: updated.subject,
+      status: updated.status,
+      solutionComment: updated.solutionComment,
+    },
+    triggeredBy,
+    exceptSocketId
+  );
+
   return serializeTicket(updated);
 }
 
 export async function closeTicket(
   ticketId: string,
   actor: { id: string; role: string; storeId: string },
-  input: CloseTicketInput
+  input: CloseTicketInput,
+  exceptSocketId?: string | string[]
 ) {
   const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
   if (!ticket) {
@@ -495,13 +595,35 @@ export async function closeTicket(
     `Ticket ${ticket.folio} cerrado por cliente ${actor.id} con rating ${input.rating}`
   );
 
+  // Notificar al personal de soporte y al resto de la tienda sobre el cierre.
+  const closer = await prisma.user.findUnique({
+    where: { id: actor.id },
+    select: { id: true, name: true, role: true },
+  });
+  if (closer) {
+    emitTicketClosed(
+      {
+        id: updated.id,
+        folio: updated.folio,
+        storeId: updated.storeId,
+        subject: updated.subject,
+        status: updated.status,
+        rating: updated.rating ?? 0,
+        ratingComment: updated.ratingComment,
+      },
+      closer,
+      exceptSocketId
+    );
+  }
+
   return serializeTicket(updated);
 }
 
 export async function rejectTicket(
   ticketId: string,
   actor: { id: string; role: string; storeId: string },
-  input: RejectTicketInput
+  input: RejectTicketInput,
+  exceptSocketId?: string | string[]
 ) {
   const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
   if (!ticket) {
@@ -548,6 +670,26 @@ export async function rejectTicket(
   });
 
   logger.info(`Ticket ${ticket.folio} rechazado por cliente ${actor.id}`);
+
+  // Notificar al personal de soporte que el cierre fue rechazado.
+  const rejecter = await prisma.user.findUnique({
+    where: { id: actor.id },
+    select: { id: true, name: true, role: true },
+  });
+  if (rejecter) {
+    emitTicketRejected(
+      {
+        id: updated.id,
+        folio: updated.folio,
+        storeId: updated.storeId,
+        subject: updated.subject,
+        status: updated.status,
+        rejectReason: updated.rejectReason ?? '',
+      },
+      rejecter,
+      exceptSocketId
+    );
+  }
 
   return serializeTicket(updated);
 }
