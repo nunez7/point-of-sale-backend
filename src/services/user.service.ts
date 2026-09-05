@@ -112,6 +112,13 @@ export async function updateUser(id: string, data: UpdateUserInput, actorId: str
   });
   if (!existing) throw ApiError.notFound('Usuario no encontrado', 'USER_NOT_FOUND');
 
+  if (existing.role === 'SOPORTE' && existing.id !== actorId) {
+    throw ApiError.forbidden(
+      'Los usuarios con rol SOPORTE no pueden ser editados',
+      'SUPPORT_USER_PROTECTED'
+    );
+  }
+
   const updateData: Record<string, unknown> = {};
   if (data.email !== undefined) updateData.email = data.email;
   if (data.name !== undefined) updateData.name = data.name;
@@ -161,6 +168,13 @@ export async function deleteUser(id: string, actorId: string) {
     throw ApiError.badRequest('No puedes eliminar tu propio usuario', 'CANNOT_DELETE_SELF');
   }
 
+  if (existing.role === 'SOPORTE') {
+    throw ApiError.forbidden(
+      'Los usuarios con rol SOPORTE no pueden ser desactivados',
+      'SUPPORT_USER_PROTECTED'
+    );
+  }
+
   return prisma.$transaction(async (tx) => {
     await tx.user.update({
       where: { id },
@@ -192,6 +206,13 @@ export interface SetUserStoresInput {
 export async function setUserStores(userId: string, data: SetUserStoresInput, actorId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw ApiError.notFound('Usuario no encontrado', 'USER_NOT_FOUND');
+
+  if (user.role === 'SOPORTE' && user.id !== actorId) {
+    throw ApiError.forbidden(
+      'Los usuarios con rol SOPORTE no pueden ser modificados',
+      'SUPPORT_USER_PROTECTED'
+    );
+  }
 
   if (!data.stores.length) {
     throw ApiError.badRequest(
