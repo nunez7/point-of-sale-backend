@@ -42,6 +42,7 @@ export const productSchema = z.object({
   sellingPrice: positiveDecimal,
   sortOrder: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
+  expirationDate: z.string().datetime({ message: 'Fecha de expiración inválida, usar formato ISO YYYY-MM-DD' }).optional().nullable(),
 });
 
 export const productUpdateSchema = productSchema.partial();

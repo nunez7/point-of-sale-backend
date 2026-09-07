@@ -3,7 +3,6 @@ import { prisma } from '../config/prisma';
 import { autoCloseStoreSessions, buildCronExpression } from './autoClose.service';
 import { logger } from '../config/logger';
 import { env } from '../config/env';
-import { emitToStore } from '../socket/socket';
 
 interface ScheduledJob {
   storeId: string;
@@ -23,7 +22,7 @@ export async function initScheduler(): Promise<void> {
     scheduleStoreAutoClose(store.id, store.autoCloseTime!, store.autoCloseDays);
   }
 
-  scheduleExpiredPromotions();
+  scheduleExpiredProducts();
 
   logger.info(`🕐 Scheduler initialized for ${stores.length} store(s)`);
 }
@@ -72,41 +71,53 @@ export function getScheduledStores(): string[] {
   return Array.from(jobs.keys());
 }
 
-function scheduleExpiredPromotions(): void {
+export function scheduleExpiredProducts(): void {
   cron.schedule(
-    '*/1 * * * *',
+    '0 8 * * *',
     async () => {
       try {
         const now = new Date();
-        const expired = await prisma.promotion.findMany({
-          where: { isActive: true, endsAt: { lt: now } },
-          select: { id: true, storeId: true },
+        const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const expiring = await prisma.product.findMany({
+          where: {
+            expirationDate: {
+              gte: now,
+              lte: sevenDaysFromNow,
+            },
+          },
+          select: {
+            id: true,
+            name: true,
+            expirationDate: true,
+            storeId: true,
+          },
         });
-        if (expired.length === 0) return;
 
-        await prisma.promotion.updateMany({
-          where: { id: { in: expired.map((p) => p.id) } },
-          data: { isActive: false },
-        });
-
-        const byStore = new Map<string, string[]>();
-        for (const p of expired) {
+        const byStore = new Map<string, { productId: string; productName: string; expirationDate: string }[]>();
+        for (const p of expiring) {
           const arr = byStore.get(p.storeId) ?? [];
-          arr.push(p.id);
+          arr.push({
+            productId: p.id,
+            productName: p.name,
+            expirationDate: p.expirationDate ? p.expirationDate.toISOString().split('T')[0] : '2100-02-02',
+          });
           byStore.set(p.storeId, arr);
         }
-        for (const [storeId, ids] of byStore) {
-          emitToStore(storeId, 'promotions:bulk-expired', { ids });
+        for (const [storeId, products] of byStore) {
+          // Lazy require to avoid circular dependency with socket.ts.
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { emitToStore } = require('../socket/socket');
+          emitToStore(storeId, 'inventory:expiration-alert', { products, storeId });
         }
         logger.info(
-          `[ExpiredPromos] Desactivadas ${expired.length} promoción(es) vencida(s) en ${byStore.size} tienda(s)`
+          `[ExpiredProducts] ${expiring.length} producto(s) próximos a expirar en ${byStore.size} tienda(s)`
         );
       } catch (err) {
-        logger.error('[ExpiredPromos] Error al desactivar promociones vencidas:', err);
+        logger.error('[ExpiredProducts] Error al verificar productos proximos a expirar:', err);
       }
     },
     { timezone: TIMEZONE }
   );
 
-  logger.info(`[ExpiredPromos] Job programado cada 1 minuto (${TIMEZONE})`);
+  logger.info(`[ExpiredProducts] Job programado diariamente a las 08:00 (${TIMEZONE})`);
 }

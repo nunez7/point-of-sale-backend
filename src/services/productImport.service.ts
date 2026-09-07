@@ -18,6 +18,7 @@ const PRODUCT_TEMPLATE_COLUMNS = [
   { key: 'lowStockThreshold' },
   { key: 'isActive' },
   { key: 'initialStock' },
+  { key: 'expirationDate' },
 ];
 
 export interface ProductImportRow {
@@ -34,6 +35,7 @@ export interface ProductImportRow {
   lowStockThreshold?: number;
   isActive?: boolean;
   initialStock?: number;
+  expirationDate?: string | null;
 }
 
 export interface ProductImportError {
@@ -75,6 +77,19 @@ function parseNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
   const num = Number(value);
   return isNaN(num) ? null : num;
+}
+
+function parseDate(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  const str = String(value).trim();
+  if (str === '') return null;
+  // Validar formato ISO YYYY-MM-DD (o vacío/por defecto 2100-02-02)
+  const isoPattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (!isoPattern.test(str)) return null;
+  // Validar que sea una fecha válida
+  const date = new Date(str);
+  if (isNaN(date.getTime())) return null;
+  return str;
 }
 
 function parseIntSafe(value: unknown): number | null {
@@ -145,6 +160,11 @@ function validateRow(row: Record<string, unknown>, rowNum: number): ProductImpor
     errors.push({ row: rowNum, field: 'isActive', message: 'isActive debe ser true/false', value: row.isActive });
   }
 
+  const expirationDate = parseDate(row.expirationDate);
+  if (row.expirationDate !== null && row.expirationDate !== undefined && row.expirationDate !== '' && expirationDate === null) {
+    errors.push({ row: rowNum, field: 'expirationDate', message: 'expirationDate debe tener formato YYYY-MM-DD', value: row.expirationDate });
+  }
+
   return errors;
 }
 
@@ -162,6 +182,7 @@ function rowToProductInput(row: Record<string, unknown>, _rowNum: number): Produ
     sortOrder: parseIntSafe(row.sortOrder) ?? 0,
     lowStockThreshold: parseIntSafe(row.lowStockThreshold) ?? 5,
     isActive: parseBoolean(row.isActive) ?? true,
+    expirationDate: parseDate(row.expirationDate) ?? '2100-02-02T00:00:00Z',
     initialStock: parseNumber(row.initialStock) ?? 0,
   };
 }
@@ -305,6 +326,7 @@ export async function importProductsFromExcel(
               sellingPrice: input.sellingPrice,
               sortOrder: input.sortOrder,
               isActive: input.isActive,
+              expirationDate: input.expirationDate,
             },
           });
 
@@ -348,6 +370,7 @@ export async function importProductsFromExcel(
               sellingPrice: input.sellingPrice,
               sortOrder: input.sortOrder,
               isActive: input.isActive,
+              expirationDate: input.expirationDate,
             },
           });
 

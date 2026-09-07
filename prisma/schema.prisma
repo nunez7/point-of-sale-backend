@@ -258,6 +258,7 @@ model Product {
   sellingPrice Decimal    @db.Decimal(12, 2)
   sortOrder    Int        @default(0)
   isActive     Boolean    @default(true)
+  expirationDate DateTime? @default("2100-02-02T00:00:00Z")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 

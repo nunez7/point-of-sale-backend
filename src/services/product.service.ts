@@ -155,6 +155,7 @@ export interface CreateProductInput {
   sellingPrice: number;
   sortOrder?: number;
   isActive?: boolean;
+  expirationDate?: string | null;
 }
 
 export async function createProduct(data: CreateProductInput, userId: string) {
@@ -175,6 +176,7 @@ export async function createProduct(data: CreateProductInput, userId: string) {
           sellingPrice: data.sellingPrice,
           sortOrder: data.sortOrder ?? 0,
           isActive: data.isActive ?? true,
+          expirationDate: data.expirationDate ?? '2100-02-02T00:00:00Z',
         },
         include: { category: true },
       });
@@ -227,19 +229,20 @@ export async function updateProduct(
           ...(data.sku !== undefined && {
             sku: data.sku?.trim() ? data.sku.trim() : null,
           }),
-        ...(data.description !== undefined && { description: data.description ?? null }),
-        ...(data.presentacion !== undefined && {
-          presentacion: data.presentacion?.trim() ? data.presentacion.trim() : null,
-        }),
-        ...(data.unidadVenta !== undefined && { unidadVenta: data.unidadVenta }),
-        ...(data.categoryId !== undefined && { categoryId: data.categoryId ?? null }),
-        ...(data.costPrice !== undefined && { costPrice: data.costPrice }),
-        ...(data.sellingPrice !== undefined && { sellingPrice: data.sellingPrice }),
-        ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
-        ...(data.isActive !== undefined && { isActive: data.isActive }),
-      },
-      include: { category: true },
-    });
+          ...(data.description !== undefined && { description: data.description ?? null }),
+          ...(data.presentacion !== undefined && {
+            presentacion: data.presentacion?.trim() ? data.presentacion.trim() : null,
+          }),
+          ...(data.unidadVenta !== undefined && { unidadVenta: data.unidadVenta }),
+          ...(data.categoryId !== undefined && { categoryId: data.categoryId ?? null }),
+          ...(data.costPrice !== undefined && { costPrice: data.costPrice }),
+          ...(data.sellingPrice !== undefined && { sellingPrice: data.sellingPrice }),
+          ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
+          ...(data.isActive !== undefined && { isActive: data.isActive }),
+          ...(data.expirationDate !== undefined && { expirationDate: data.expirationDate }),
+        },
+        include: { category: true },
+      });
 
     await tx.auditLog.create({
       data: {

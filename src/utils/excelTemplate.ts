@@ -35,6 +35,7 @@ export const PRODUCT_TEMPLATE_COLUMNS: ExcelTemplateColumn[] = [
   { header: 'lowStockThreshold', key: 'lowStockThreshold', width: 18, required: false, description: 'Umbral de stock bajo para alertas (entero >= 0). Default: 5', example: '5' },
   { header: 'isActive', key: 'isActive', width: 12, required: false, description: 'Activo para venta: true/false. Default: true. Inactivos no aparecen en POS', example: 'true' },
   { header: 'initialStock', key: 'initialStock', width: 15, required: false, description: 'Cantidad inicial de inventario (entero o decimal >= 0). Default: 0', example: '100' },
+  { header: 'expirationDate', key: 'expirationDate', width: 18, required: false, description: 'Fecha de expiración (formato YYYY-MM-DD). Default: 2100-02-02', example: '2100-02-02' },
 ];
 
 export interface CategoryRef {
@@ -121,6 +122,7 @@ export function generateProductExcelTemplate(categories: CategoryRef[] = []): Bu
     if (c.key === 'lowStockThreshold') return '5';
     if (c.key === 'isActive') return 'true';
     if (c.key === 'initialStock') return '100';
+    if (c.key === 'expirationDate') return '2100-02-02';
     return '';
   });
   wsData.push(exampleRow2);
@@ -128,6 +130,7 @@ export function generateProductExcelTemplate(categories: CategoryRef[] = []): Bu
   const exampleRow3 = PRODUCT_TEMPLATE_COLUMNS.map((c) => {
     if (c.key === 'name') return 'EJEMPLO - NO IMPORTAR';
     if (c.key === 'sku') return 'EJEMPLO-NO-IMPORTAR';
+    if (c.key === 'expirationDate') return '';
     return '';
   });
   wsData.push(exampleRow3);
@@ -214,8 +217,9 @@ export function generateProductExcelTemplate(categories: CategoryRef[] = []): Bu
     ['7. lowStockThreshold: umbral de stock bajo para alertas (entero >= 0). Default: 5'],
     ['8. isActive: true/false. Default: true. Productos inactivos no aparecen en POS.'],
     ['9. initialStock: cantidad inicial de inventario (>= 0). Default: 0'],
-    ['10. La fila 4 (EJEMPLO - NO IMPORTAR) se ignora automáticamente al importar.'],
-    ['11. No elimine ni reordene las columnas. Mantenga los encabezados exactos.'],
+    ['10. expirationDate: fecha de expiración en formato YYYY-MM-DD (ej: 2025-12-31). Default: 2100-02-02. Los productos con fecha próxima a expirar se resaltarán en reportes e alertas.'],
+    ['11. La fila 4 (EJEMPLO - NO IMPORTAR) se ignora automáticamente al importar.'],
+    ['12. No elimine ni reordene las columnas. Mantenga los encabezados exactos.'],
     ['12. Guarde como .xlsx y cárguelo en Productos > Importar Excel.'],
   ];
 

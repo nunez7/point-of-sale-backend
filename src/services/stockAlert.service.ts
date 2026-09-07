@@ -1,6 +1,6 @@
 import { prisma } from '../config/prisma';
 
-export type StockAlertType = 'OUT_OF_STOCK' | 'LOW_STOCK';
+export type StockAlertType = 'OUT_OF_STOCK' | 'LOW_STOCK' | 'EXPIRING_SOON';
 
 export interface StockAlertPayload {
   storeId: string;
@@ -124,6 +124,43 @@ export async function getStockAlerts(storeId: string) {
         type: 'LOW_STOCK',
       });
     }
+  }
+
+  return alerts;
+}
+
+// Obtiene productos próximos a expirar (dentro de 7 días) para emitir alertas
+export async function getExpirationAlerts(storeId: string) {
+  const now = new Date();
+  const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const products = await prisma.product.findMany({
+    where: {
+      storeId,
+      expirationDate: {
+        gte: now,
+        lte: sevenDaysFromNow,
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      expirationDate: true,
+    },
+  });
+
+  const alerts: Array<{
+    productId: string;
+    productName: string;
+    expirationDate: string;
+  }> = [];
+
+  for (const product of products) {
+    alerts.push({
+      productId: product.id,
+      productName: product.name,
+      expirationDate: product.expirationDate ? product.expirationDate.toISOString().split('T')[0] : '2100-02-02',
+    });
   }
 
   return alerts;
