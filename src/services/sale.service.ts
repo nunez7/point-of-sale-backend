@@ -655,6 +655,92 @@ export async function listHeldSales(storeId: string) {
   });
 }
 
+// Elimina (cancela) una venta en espera individual. Las ventas en espera no
+// descuentan inventario, así que solo se marca CANCELED para conservar el rastro.
+export async function deleteHeldSale(id: string, storeId: string, userId: string) {
+  return prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findFirst({
+      where: { id, storeId, status: 'ON_HOLD' },
+    });
+
+    if (!sale) {
+      throw ApiError.notFound(
+        'Pedido en espera no encontrado',
+        'HELD_SALE_NOT_FOUND'
+      );
+    }
+
+    const deleted = await tx.sale.update({
+      where: { id },
+      data: {
+        status: 'CANCELED',
+        canceledAt: new Date(),
+        canceledBy: userId,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        storeId,
+        userId,
+        action: 'DELETE_HELD_SALE',
+        entity: 'SALE',
+        entityId: id,
+        metadata: {
+          saleNumber: sale.saleNumber,
+          previousStatus: 'ON_HOLD',
+          newStatus: 'CANCELED',
+        },
+      },
+    });
+
+    return deleted;
+  });
+}
+
+// Vacía todas las ventas en espera de una tienda. Marca cada una como CANCELED
+// y devuelve el número de registros eliminados.
+export async function clearHeldSales(storeId: string, userId: string) {
+  return prisma.$transaction(async (tx) => {
+    const held = await tx.sale.findMany({
+      where: { storeId, status: 'ON_HOLD' },
+      select: { id: true, saleNumber: true },
+    });
+
+    if (held.length === 0) {
+      throw ApiError.notFound(
+        'No hay pedidos en espera en esta tienda',
+        'NO_HELD_SALES'
+      );
+    }
+
+    const updated = await tx.sale.updateMany({
+      where: { storeId, status: 'ON_HOLD' },
+      data: {
+        status: 'CANCELED',
+        canceledAt: new Date(),
+        canceledBy: userId,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        storeId,
+        userId,
+        action: 'CLEAR_HELD_SALES',
+        entity: 'SALE',
+        entityId: storeId,
+        metadata: {
+          count: updated.count,
+          saleNumbers: held.map((s) => s.saleNumber),
+        },
+      },
+    });
+
+    return { count: updated.count };
+  });
+}
+
 // Obtener los datos de una venta en espera para cargarla en el carrito.
 export async function retrieveHeldSale(id: string, storeId: string) {
   const sale = await prisma.sale.findFirst({

@@ -163,3 +163,17 @@ export const completeHeldSale = asyncAuthHandler(async (req: AuthedRequest, res:
   });
   res.json({ sale, message: 'Pedido en espera completado e inventario actualizado' });
 });
+
+export const deleteHeldSale = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const sale = await saleService.deleteHeldSale(
+    req.params.id,
+    req.user!.storeId,
+    req.user!.id
+  );
+  res.json({ sale, message: 'Pedido en espera eliminado' });
+});
+
+export const clearHeldSales = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const result = await saleService.clearHeldSales(req.user!.storeId, req.user!.id);
+  res.json({ count: result.count, message: `Se eliminaron ${result.count} pedidos en espera` });
+});

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createSale, listSales, getSale, cancelSale, lookupSale, listOrders, confirmOrder, cancelOrder, holdSale, listHeldSales, retrieveHeldSale, completeHeldSale } from '../controllers/sale.controller';
+import { createSale, listSales, getSale, cancelSale, lookupSale, listOrders, confirmOrder, cancelOrder, holdSale, listHeldSales, retrieveHeldSale, completeHeldSale, deleteHeldSale, clearHeldSales } from '../controllers/sale.controller';
 import { saleSchema, saleQuerySchema, idParamSchema, saleLookupSchema, orderQuerySchema } from '../schemas';
 import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
@@ -19,6 +19,8 @@ router.get('/', requireAuth, validate(saleQuerySchema, 'query'), listSales);
 // Rutas estáticas ANTES de /:id para evitar que el parámetro las capture.
 router.get('/orders', requireAuth, validate(orderQuerySchema, 'query'), listOrders);
 router.get('/lookup', requireAuth, validate(saleLookupSchema, 'query'), lookupSale);
+router.get('/held', requireAuth, validate(orderQuerySchema, 'query'), listHeldSales);
+router.delete('/held', requireAuth, requireRole(Role.VENDEDOR, Role.GERENTE, Role.ADMIN), validate(orderQuerySchema, 'query'), clearHeldSales);
 router.get('/:id', requireAuth, validate(idParamSchema, 'params'), getSale);
 router.patch(
   '/:id/cancel',
@@ -53,17 +55,18 @@ router.post(
 );
 
 router.get(
-  '/held',
-  requireAuth,
-  validate(orderQuerySchema, 'query'),
-  listHeldSales
-);
-
-router.get(
   '/:id/retrieve',
   requireAuth,
   validate(idParamSchema, 'params'),
   retrieveHeldSale
+);
+
+router.delete(
+  '/:id/held',
+  requireAuth,
+  requireRole(Role.VENDEDOR, Role.GERENTE, Role.ADMIN),
+  validate(idParamSchema, 'params'),
+  deleteHeldSale
 );
 
 router.post(
