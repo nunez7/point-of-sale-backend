@@ -19,6 +19,9 @@ export interface CreateSaleInput {
   notes?: string | null;
   // Sesión de caja que procesa la venta (corte de caja).
   cajaSessionId?: string | null;
+  // Efectivo recibido y cambio entregado (ticket impreso). Solo en CASH.
+  received?: number | null;
+  change?: number | null;
 }
 
 export interface SaleResult {
@@ -257,6 +260,12 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
         ...(input.clienteId ? { clienteId: input.clienteId } : {}),
         ...(input.cajaSessionId ? { cajaSessionId: input.cajaSessionId } : {}),
         ...(input.notes ? { notes: input.notes } : {}),
+        ...(input.paymentMethod === 'CASH' && input.received != null
+          ? { received: new Prisma.Decimal(input.received) }
+          : {}),
+        ...(input.paymentMethod === 'CASH' && input.change != null
+          ? { change: new Prisma.Decimal(input.change) }
+          : {}),
         items: {
           create: preparedItems.map((it) => ({
             productId: it.productId,
@@ -341,6 +350,8 @@ function serializeSale<
     discount: Prisma.Decimal | number;
     profit: Prisma.Decimal | number;
     profitMargin: Prisma.Decimal | number;
+    received?: Prisma.Decimal | number | null;
+    change?: Prisma.Decimal | number | null;
     status: string;
     items: Array<{
       quantity: Prisma.Decimal | number;
@@ -358,6 +369,8 @@ function serializeSale<
     discount: Number(sale.discount),
     profit: Number(sale.profit),
     profitMargin: Number(sale.profitMargin),
+    received: sale.received == null ? null : Number(sale.received),
+    change: sale.change == null ? null : Number(sale.change),
     status: sale.status,
     items: sale.items.map((it) => ({
       ...it,

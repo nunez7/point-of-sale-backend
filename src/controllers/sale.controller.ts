@@ -7,7 +7,7 @@ import { AuthedRequest } from '../types';
 import { checkStockAlert } from '../services/stockAlert.service';
 
 export const createSale = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
-  const { items, paymentMethod, discount, storeId, status, clienteId, notes } = req.body;
+  const { items, paymentMethod, discount, storeId, status, clienteId, notes, received, change } = req.body;
 
   if (storeId !== req.user!.storeId) {
     throw ApiError.forbidden('Solo puedes operar en tu tienda', 'STORE_MISMATCH');
@@ -22,6 +22,8 @@ export const createSale = asyncAuthHandler(async (req: AuthedRequest, res: Respo
     status,
     clienteId,
     notes,
+    received,
+    change,
     cajaSessionId: req.body.cajaSessionId ?? null,
   });
 

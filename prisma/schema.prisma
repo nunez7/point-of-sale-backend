@@ -376,6 +376,10 @@ model Sale {
   profit      Decimal       @db.Decimal(12, 2)
   profitMargin Decimal      @db.Decimal(12, 2)
   paymentMethod PaymentMethod
+  // Monto recibido y cambio entregado en efectivo (para el ticket impreso).
+  // Solo se llenan en ventas de contado (CASH); nulos en tarjeta/crédito.
+  received    Decimal?   @db.Decimal(12, 2)
+  change      Decimal?   @db.Decimal(12, 2)
   // COMPLETED (venta confirmada), PENDING (pedido sin confirmar, no descuenta
   // inventario), CANCELED (venta o pedido anulado).
   status      String        @default("COMPLETED")

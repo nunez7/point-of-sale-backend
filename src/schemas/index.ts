@@ -88,6 +88,9 @@ export const saleSchema = z.object({
   // Pedido: cliente asociado (opcional) y notas libres.
   clienteId: z.string().nullable().optional(),
   notes: z.string().max(500, 'Máximo 500 caracteres').nullable().optional(),
+  // Efectivo recibido y cambio entregado (ticket impreso). Solo en CASH.
+  received: z.number().min(0, 'El monto recibido no puede ser negativo').nullable().optional(),
+  change: z.number().min(0, 'El cambio no puede ser negativo').nullable().optional(),
 });
 
 export const saleQuerySchema = z.object({
