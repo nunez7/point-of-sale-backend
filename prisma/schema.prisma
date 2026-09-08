@@ -13,6 +13,8 @@ enum Role {
   GERENTE
   VENDEDOR
   SOPORTE
+
+  @@map("role")
 }
 
 enum PaymentMethod {
@@ -21,11 +23,15 @@ enum PaymentMethod {
   TRANSFER
   CREDIT
   OTHER
+
+  @@map("payment_method")
 }
 
 enum StoreRelation {
   OWNED
   ASSIGNED
+
+  @@map("store_relation")
 }
 
 // Forma de venta del producto:
@@ -36,6 +42,8 @@ enum UnidadVenta {
   UNIDAD
   PESO
   VOLUMEN
+
+  @@map("unidad_venta")
 }
 
 enum PromotionType {
@@ -46,6 +54,8 @@ enum PromotionType {
   TIERED_BY_AMOUNT
   COMBO
   CATEGORY_PERCENTAGE
+
+  @@map("promotion_type")
 }
 
 enum Weekday {
@@ -56,6 +66,8 @@ enum Weekday {
   FRIDAY
   SATURDAY
   SUNDAY
+
+  @@map("weekday")
 }
 
 enum TicketStatus {
@@ -66,6 +78,8 @@ enum TicketStatus {
   SOLVED
   CLOSED
   REJECTED
+
+  @@map("ticket_status")
 }
 
 enum TicketPriority {
@@ -73,6 +87,8 @@ enum TicketPriority {
   MEDIUM
   HIGH
   URGENT
+
+  @@map("ticket_priority")
 }
 
 enum TicketModule {
@@ -87,6 +103,8 @@ enum TicketModule {
   STORES
   REPORTS
   CANCELLATIONS
+
+  @@map("ticket_module")
 }
 
 // Motivo editable de cancelación (venta, factura, compra a proveedor).
@@ -107,6 +125,8 @@ model CancellationReason {
 
   @@unique([storeId, name])
   @@index([storeId])
+
+  @@map("cancellation_reason")
 }
 
 // Tipo de movimiento de inventario manual:
@@ -115,6 +135,8 @@ model CancellationReason {
 enum MovementTipo {
   ENTRADA
   SALIDA
+
+  @@map("movement_tipo")
 }
 
 model Store {
@@ -169,6 +191,8 @@ model Store {
   promotionApplications PromotionApplication[]
   tickets         Ticket[]
   ticketConfigs   TicketConfig[]
+
+  @@map("store")
 }
 
 model User {
@@ -197,6 +221,8 @@ model User {
   tickets         Ticket[]
   ticketComments  TicketComment[]
   assignedTickets Ticket[] @relation("TicketAssignedSoporte")
+
+  @@map("user")
 }
 
 // Relación muchos a muchos Usuario↔Tienda: un usuario puede administrar
@@ -217,6 +243,8 @@ model UserStore {
   @@unique([userId, storeId])
   @@index([storeId])
   @@index([userId, isPrimary])
+
+  @@map("user_store")
 }
 
 model RevokedToken {
@@ -229,6 +257,8 @@ model RevokedToken {
 
   @@index([expiresAt])
   @@index([userId])
+
+  @@map("revoked_token")
 }
 
 model Category {
@@ -241,6 +271,8 @@ model Category {
   products Product[]
   promotionItems PromotionItem[]
   @@unique([name, storeId])
+
+  @@map("category")
 }
 
 model Product {
@@ -271,6 +303,8 @@ model Product {
 
   @@index([storeId])
   @@index([categoryId])
+
+  @@map("product")
 }
 
 model Inventory {
@@ -285,6 +319,8 @@ model Inventory {
 
   @@unique([storeId, productId])
   @@index([productId])
+
+  @@map("inventory")
 }
 
 // Motivo editable de un movimiento de inventario (merma, caducado, robo, reabasto, etc.).
@@ -303,6 +339,8 @@ model MovementReason {
 
   @@unique([storeId, name])
   @@index([storeId])
+
+  @@map("movement_reason")
 }
 
 // Bitácora de movimientos manuales de inventario. Cada fila ajusta Inventory.quantity
@@ -344,6 +382,8 @@ model StockMovement {
   @@index([batchId])
   @@index([referenceType, referenceId])
   @@index([userId])
+
+  @@map("stock_movement")
 }
 
 // Snapshot de apertura del día: captura el stock al iniciar operaciones.
@@ -360,6 +400,8 @@ model InventorySnapshot {
 
   @@unique([storeId, productId, date])
   @@index([storeId, date])
+
+  @@map("inventory_snapshot")
 }
 
 model Sale {
@@ -409,6 +451,8 @@ model Sale {
   @@index([clienteId])
   @@index([userId])
   @@index([cajaSessionId])
+
+  @@map("sale")
 }
 
 model SaleItem {
@@ -434,6 +478,8 @@ model SaleItem {
 
   @@index([saleId])
   @@index([productId])
+
+  @@map("sale_item")
 }
 
 model Supplier {
@@ -454,6 +500,8 @@ model Supplier {
   transactions SupplierTransaction[]
 
   @@index([storeId])
+
+  @@map("supplier")
 }
 
 model SupplierTransaction {
@@ -488,6 +536,8 @@ model SupplierTransaction {
   @@index([userId])
   @@index([cajaSessionId])
   @@index([paidFrom])
+
+  @@map("supplier_transaction")
 }
 
 model SupplierTransactionItem {
@@ -507,6 +557,8 @@ model SupplierTransactionItem {
 
   @@index([transactionId])
   @@index([productId])
+
+  @@map("supplier_transaction_item")
 }
 
 model AuditLog {
@@ -524,6 +576,8 @@ model AuditLog {
   @@index([storeId, createdAt])
   @@index([entity, entityId])
   @@index([userId])
+
+  @@map("audit_log")
 }
 
 model Cliente {
@@ -548,6 +602,8 @@ model Cliente {
 
   @@unique([storeId, rfc])
   @@index([storeId, nombreRazonSocial])
+
+  @@map("cliente")
 }
 
 model Factura {
@@ -587,6 +643,8 @@ model Factura {
   @@index([storeId, createdAt])
   @@index([clienteId])
   @@index([userId])
+
+  @@map("factura")
 }
 
 model Cancellation {
@@ -616,6 +674,8 @@ model Cancellation {
   @@index([entityType, entityId])
   @@index([cancellationReasonId])
   @@index([userId])
+
+  @@map("cancellation")
 }
 
 // Artículos cancelados dentro de una cancelación (usado en cancelaciones parciales).
@@ -639,6 +699,8 @@ model CancellationItem {
   @@index([storeId])
   @@index([productId])
   @@index([saleItemId])
+
+  @@map("cancellation_item")
 }
 
 // Caja física de la tienda. El admin/gerente las da de alta y opcionalmente
@@ -660,6 +722,8 @@ model Caja {
   @@unique([storeId, name])
   @@index([storeId])
   @@index([assignedUserId])
+
+  @@map("caja")
 }
 
 // Turno de caja: combina la apertura (saldo inicial declarado) y el cierre
@@ -718,6 +782,8 @@ model CajaSession {
   @@index([storeId, openingDate])
   @@index([cajaId])
   @@index([userId])
+
+  @@map("caja_session")
 }
 
 // Movimiento de dinero registrado sobre una sesión abierta de caja: ingreso
@@ -742,6 +808,8 @@ model CajaMovimiento {
   @@index([storeId])
   @@index([cajaSessionId])
   @@index([userId])
+
+  @@map("caja_movimiento")
 }
 
 // Catálogo de motivos para movimientos de caja.
@@ -761,6 +829,8 @@ model CajaMovimientoMotivo {
   @@unique([storeId, name])
   @@index([storeId])
   @@index([tipo])
+
+  @@map("caja_movimiento_motivo")
 }
 
 // Registro histórico de alertas de umbral en caja.
@@ -782,6 +852,8 @@ model CajaAlert {
   @@index([storeId])
   @@index([cajaSessionId])
   @@index([triggeredAt])
+
+  @@map("caja_alert")
 }
 
 // Promociones aplicables a productos o categorías dentro de una tienda.
@@ -821,6 +893,8 @@ model Promotion {
   @@index([storeId, isActive])
   @@index([storeId, startsAt, endsAt])
   @@index([type])
+
+  @@map("promotion")
 }
 
 model PromotionItem {
@@ -839,6 +913,8 @@ model PromotionItem {
   @@unique([promotionId, categoryId])
   @@index([productId])
   @@index([categoryId])
+
+  @@map("promotion_item")
 }
 
 // Bitácora de cada aplicación de promoción en una venta. Permite reportes
@@ -866,6 +942,8 @@ model PromotionApplication {
   @@index([saleId])
   @@index([promotionId])
   @@index([productId])
+
+  @@map("promotion_application")
 }
 
 // Ticket de soporte técnico. El folio es STORE-CODE + secuencial (TICKET-STORE001-0001).
@@ -908,6 +986,8 @@ model Ticket {
   @@index([status])
   @@index([ticketModule])
   @@index([priority])
+
+  @@map("ticket")
 }
 
 model TicketComment {
@@ -921,6 +1001,8 @@ model TicketComment {
 
   @@index([ticketId])
   @@index([userId])
+
+  @@map("ticket_comment")
 }
 
 model TicketAttachment {
@@ -933,6 +1015,8 @@ model TicketAttachment {
   createdAt DateTime @default(now())
 
   @@index([ticketId])
+
+  @@map("ticket_attachment")
 }
 
 // Configuración de soporte por tienda: qué usuario SOPORTE atiende la tienda.
@@ -942,4 +1026,6 @@ model TicketConfig {
   soporteUserId String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@map("ticket_config")
 }

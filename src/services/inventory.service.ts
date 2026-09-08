@@ -70,7 +70,7 @@ export async function getLowStock(storeId: string) {
   // Prisma where) para no traer todo el inventario y filtrar en memoria.
   const candidatos = await prisma.$queryRaw<{ id: string }[]>`
     SELECT id
-    FROM "Inventory"
+    FROM "inventory"
     WHERE "storeId" = ${storeId}
       AND "quantity" <= "lowStockThreshold"
   `;
