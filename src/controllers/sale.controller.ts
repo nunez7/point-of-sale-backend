@@ -128,3 +128,36 @@ export const cancelOrder = asyncAuthHandler(async (req: AuthedRequest, res: Resp
   );
   res.json({ sale, message: 'Pedido cancelado' });
 });
+
+export const holdSale = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const sale = await saleService.holdSale(
+    req.params.id,
+    req.user!.storeId,
+    req.user!.id
+  );
+  emitToStore(req.user!.storeId, 'sale:held', { id: sale.id, saleNumber: sale.saleNumber });
+  res.json({ sale, message: 'Pedido puesto en espera' });
+});
+
+export const listHeldSales = asyncHandler(async (req: AuthedRequest, res: Response) => {
+  const orders = await saleService.listHeldSales(req.user!.storeId);
+  res.json({ orders });
+});
+
+export const retrieveHeldSale = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const sale = await saleService.retrieveHeldSale(req.params.id, req.user!.storeId);
+  res.json({ sale });
+});
+
+export const completeHeldSale = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const sale = await saleService.completeHeldSale(
+    req.params.id,
+    req.user!.storeId,
+    req.user!.id
+  );
+  emitToStore(req.user!.storeId, 'inventory:updated', {
+    storeId: req.user!.storeId,
+    trigger: 'order:confirmed',
+  });
+  res.json({ sale, message: 'Pedido en espera completado e inventario actualizado' });
+});

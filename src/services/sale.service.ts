@@ -583,6 +583,166 @@ export async function confirmOrder(id: string, storeId: string, userId: string) 
   });
 }
 
+// Poner una venta en espera (ON_HOLD). El inventario no se descuenta.
+// Se usa cuando un producto no está registrado o cuando el usuario necesita
+// pausar la venta momentáneamente.
+export async function holdSale(
+  id: string,
+  storeId: string,
+  userId: string
+) {
+  return prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findFirst({
+      where: { id, storeId },
+    });
+
+    if (!sale) {
+      throw ApiError.notFound('Pedido no encontrado', 'ORDER_NOT_FOUND');
+    }
+
+    if (sale.status === 'ON_HOLD') {
+      throw ApiError.badRequest('El pedido ya está en espera', 'ORDER_ALREADY_ON_HOLD');
+    }
+
+    if (sale.status === 'COMPLETED') {
+      throw ApiError.badRequest('No se puede poner en espera una venta completada', 'ORDER_COMPLETED_CANNOT_HOLD');
+    }
+
+    const held = await tx.sale.update({
+      where: { id },
+      data: { status: 'ON_HOLD' },
+    });
+
+    // Audit log
+    await tx.auditLog.create({
+      data: {
+        storeId,
+        userId,
+        action: 'HOLD_SALE',
+        entity: 'SALE',
+        entityId: sale.id,
+        metadata: {
+          saleNumber: sale.saleNumber,
+          previousStatus: sale.status,
+          newStatus: 'ON_HOLD',
+        },
+      },
+    });
+
+    return held;
+  });
+}
+
+// Obtener todas las ventas en espera de una tienda.
+export async function listHeldSales(storeId: string) {
+  return prisma.sale.findMany({
+    where: { storeId, status: 'ON_HOLD' },
+    include: { items: { include: { product: true } } },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+// Obtener los datos de una venta en espera para cargarla en el carrito.
+export async function retrieveHeldSale(id: string, storeId: string) {
+  const sale = await prisma.sale.findFirst({
+    where: { id, storeId, status: 'ON_HOLD' },
+    include: {
+      items: {
+        include: {
+          product: {
+            include: { category: true },
+          },
+        },
+      },
+      user: { select: { id: true, name: true, email: true } },
+      cliente: { select: { id: true, nombreRazonSocial: true, rfc: true } },
+    },
+  });
+
+  if (!sale) {
+    throw ApiError.notFound('Pedido en espera no encontrado', 'HELD_SALE_NOT_FOUND');
+  }
+
+  return sale;
+}
+
+// Confirmar/completar una venta en espera.
+// Marca la venta como COMPLETED, valida y descuenta inventario atomically.
+export async function completeHeldSale(
+  id: string,
+  storeId: string,
+  userId: string,
+  paymentMethod?: string
+) {
+  return prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findFirst({
+      where: { id, storeId, status: 'ON_HOLD' },
+      include: { items: true },
+    });
+
+    if (!sale) {
+      throw ApiError.notFound('Pedido en espera no encontrado o ya completado', 'HELD_SALE_NOT_FOUND');
+    }
+
+    // Validar stock disponible para cada artículo
+    for (const item of sale.items) {
+      const inventory = await tx.inventory.findUnique({
+        where: { storeId_productId: { storeId, productId: item.productId } },
+      });
+      const stock = inventory?.quantity ?? new Prisma.Decimal(0);
+      if (new Prisma.Decimal(stock).lessThan(item.quantity)) {
+        throw ApiError.badRequest(
+          `Stock insuficiente para completar el pedido (disponible: ${Number(stock)})`,
+          'INSUFFICIENT_STOCK'
+        );
+      }
+    }
+
+    // Descuenta inventario atomically
+    for (const item of sale.items) {
+      const updated = await tx.inventory.updateMany({
+        where: {
+          storeId,
+          productId: item.productId,
+          quantity: { gte: item.quantity },
+        },
+        data: { quantity: { decrement: item.quantity } },
+      });
+      if (updated.count === 0) {
+        throw ApiError.badRequest('Stock insuficiente al deducir inventario', 'INSUFFICIENT_STOCK');
+      }
+    }
+
+    // Actualizar venta a COMPLETED
+    const confirmed = await tx.sale.update({
+      where: { id },
+      data: {
+        status: 'COMPLETED',
+        confirmedAt: new Date(),
+        confirmedBy: userId,
+        ...(paymentMethod && { paymentMethod: paymentMethod as PaymentMethod }),
+      },
+    });
+
+    // Audit log
+    await tx.auditLog.create({
+      data: {
+        storeId,
+        userId,
+        action: 'COMPLETE_HELD_SALE',
+        entity: 'SALE',
+        entityId: sale.id,
+        metadata: {
+          saleNumber: sale.saleNumber,
+          total: sale.total.toString(),
+        },
+      },
+    });
+
+    return confirmed;
+  });
+}
+
 // Cancela un pedido pendiente (status PENDING). Como nunca descontó
 // inventario, no es necesario reponerlo; solo se marca como CANCELED.
 export async function cancelOrder(id: string, storeId: string, userId: string) {

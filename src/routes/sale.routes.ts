@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createSale, listSales, getSale, cancelSale, lookupSale, listOrders, confirmOrder, cancelOrder } from '../controllers/sale.controller';
+import { createSale, listSales, getSale, cancelSale, lookupSale, listOrders, confirmOrder, cancelOrder, holdSale, listHeldSales, retrieveHeldSale, completeHeldSale } from '../controllers/sale.controller';
 import { saleSchema, saleQuerySchema, idParamSchema, saleLookupSchema, orderQuerySchema } from '../schemas';
 import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
@@ -40,6 +40,38 @@ router.post(
   requireRole(Role.VENDEDOR, Role.GERENTE, Role.ADMIN),
   validate(idParamSchema, 'params'),
   cancelOrder
+);
+
+// --- Rutas para ventas en espera (parked/held sales) ---
+
+router.post(
+  '/:id/hold',
+  requireAuth,
+  requireRole(Role.VENDEDOR, Role.GERENTE, Role.ADMIN),
+  validate(idParamSchema, 'params'),
+  holdSale
+);
+
+router.get(
+  '/held',
+  requireAuth,
+  validate(orderQuerySchema, 'query'),
+  listHeldSales
+);
+
+router.get(
+  '/:id/retrieve',
+  requireAuth,
+  validate(idParamSchema, 'params'),
+  retrieveHeldSale
+);
+
+router.post(
+  '/:id/complete-held',
+  requireAuth,
+  requireRole(Role.VENDEDOR, Role.GERENTE, Role.ADMIN),
+  validate(idParamSchema, 'params'),
+  completeHeldSale
 );
 
 export default router;
