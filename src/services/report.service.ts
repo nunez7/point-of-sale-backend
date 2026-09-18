@@ -541,7 +541,7 @@ export async function suppliersReport(storeId: string) {
   await validateStore(storeId);
 
   const transactions = await prisma.supplierTransaction.findMany({
-    where: { storeId },
+    where: { storeId, status: 'COMPLETED' },
     select: { id: true, supplierId: true, total: true, supplier: { select: { id: true, name: true } } },
   });
 

@@ -20,24 +20,34 @@ export const lookupEntity = asyncAuthHandler(async (req: AuthedRequest, res: Res
 });
 
 export const confirmCancellation = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
-  const { entityType, entityId, cancellationReasonId, comment, items } = req.body;
+  const { entityType, entityId, cancellationReasonId, comment, items, type, cajaSessionId } = req.body;
 
-  const cancellation = await cancelService.confirmCancellation(
+  const cancellation = await cancelService.confirmCancellation({
     entityType,
     entityId,
-    req.user!.storeId,
-    req.user!.id,
+    storeId: req.user!.storeId,
+    userId: req.user!.id,
     cancellationReasonId,
     comment,
-    items
-  );
+    items,
+    type,
+    cajaSessionId,
+  });
 
   emitToStore(req.user!.storeId, 'inventory:updated', {
     storeId: req.user!.storeId,
     trigger: `cancel:${entityType.toLowerCase()}`,
   });
 
-  res.json({ cancellation, message: 'Cancelación registrada exitosamente' });
+  // Si es devolución, también emitir evento de caja
+  if (type === 'REFUND') {
+    emitToStore(req.user!.storeId, 'caja:updated', {
+      storeId: req.user!.storeId,
+      trigger: 'refund',
+    });
+  }
+
+  res.json({ cancellation, message: type === 'REFUND' ? 'Devolución registrada exitosamente' : 'Cancelación registrada exitosamente' });
 });
 
 export const listCancellations = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
@@ -46,7 +56,7 @@ export const listCancellations = asyncAuthHandler(async (req: AuthedRequest, res
     endDate?: string;
     entityType?: string;
     cancellationReasonId?: string;
-    type?: 'FULL' | 'PARTIAL';
+    type?: 'FULL' | 'PARTIAL' | 'REFUND';
   };
 
   const cancellations = await cancelService.listCancellations(req.user!.storeId, {

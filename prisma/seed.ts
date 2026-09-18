@@ -134,6 +134,7 @@ async function main() {
     'Cliente/proveedor solicita anular',
     'Duplicada',
     'Devolución de mercancía',
+    'Reembolso al cliente',
     'Cancelación de pedido',
     'Otro',
   ];

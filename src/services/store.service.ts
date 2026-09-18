@@ -17,6 +17,7 @@ export type UpdateStoreInput = {
   autoCloseEnabled?: boolean;
   autoCloseTime?: string | null;
   autoCloseDays?: string[];
+  diasLimiteDevolucion?: number;
 };
 
 function mapearErrorCodigoDuplicado(error: unknown): unknown {
@@ -301,6 +302,7 @@ return await prisma.$transaction(async (tx) => {
           ...(data.autoCloseEnabled !== undefined && { autoCloseEnabled: data.autoCloseEnabled }),
           ...(data.autoCloseTime !== undefined && { autoCloseTime: data.autoCloseTime }),
           ...(data.autoCloseDays !== undefined && { autoCloseDays: data.autoCloseDays }),
+          ...(data.diasLimiteDevolucion !== undefined && { diasLimiteDevolucion: data.diasLimiteDevolucion }),
         },
       });
 

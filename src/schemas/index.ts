@@ -277,6 +277,12 @@ export const storeUpdateSchema = z
     notifyLowStock: z.boolean().optional(),
     controlCajas: z.boolean().optional(),
     aperturaCajaConInventario: z.boolean().optional(),
+    diasLimiteDevolucion: z
+      .number()
+      .int('Debe ser un número entero')
+      .min(1, 'Mínimo 1 día')
+      .max(365, 'Máximo 365 días')
+      .optional(),
   })
   .refine((d) => Object.keys(d).length > 0, {
     message: 'Debe enviar al menos un campo a actualizar',
@@ -419,7 +425,12 @@ export const cancelConfirmSchema = z.object({
     .max(500, 'Máximo 500 caracteres')
     .optional()
     .nullable(),
-  // Cancelación parcial (solo SALE): lista de artículos con la cantidad a cancelar.
+  // FULL | PARTIAL | REFUND (devolución con reembolso)
+  type: z
+    .enum(['FULL', 'PARTIAL', 'REFUND'])
+    .optional()
+    .default('FULL'),
+  // Cancelación parcial/refund (solo SALE): lista de artículos con la cantidad a cancelar.
   items: z
     .array(
       z.object({
@@ -429,7 +440,31 @@ export const cancelConfirmSchema = z.object({
     )
     .min(1, 'Debe incluir al menos un artículo')
     .optional(),
-});
+  // Para REFUND: sesión de caja abierta donde se registra el reembolso
+  cajaSessionId: z.string().optional().nullable(),
+}).refine(
+  (data) => {
+    if (data.type === 'REFUND') {
+      return data.entityType === 'SALE';
+    }
+    return true;
+  },
+  {
+    message: 'Las devoluciones (REFUND) solo están disponibles para ventas (SALE)',
+    path: ['entityType'],
+  }
+).refine(
+  (data) => {
+    if (data.type === 'REFUND') {
+      return !!data.cajaSessionId;
+    }
+    return true;
+  },
+  {
+    message: 'La sesión de caja es requerida para devoluciones con reembolso',
+    path: ['cajaSessionId'],
+  }
+);
 
 export const cancelationsQuerySchema = z.object({
   startDate: z
@@ -442,7 +477,7 @@ export const cancelationsQuerySchema = z.object({
     .optional(),
   entityType: z.enum(['SALE', 'FACTURA', 'SUPPLIER_TRANSACTION']).optional(),
   cancellationReasonId: z.string().optional(),
-  type: z.enum(['FULL', 'PARTIAL']).optional(),
+  type: z.enum(['FULL', 'PARTIAL', 'REFUND']).optional(),
 });
 
 // ---------- Motivos de movimiento de inventario ----------

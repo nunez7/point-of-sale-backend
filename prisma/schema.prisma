@@ -163,6 +163,7 @@ model Store {
   umbralAlertaEfectivo   Decimal? @db.Decimal(12, 2)
   umbralAlertaTarjeta    Decimal? @db.Decimal(12, 2)
   umbralAlertaEgresos    Decimal? @db.Decimal(12, 2)
+  diasLimiteDevolucion Int @default(7)
   isActive   Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

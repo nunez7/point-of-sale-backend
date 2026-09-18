@@ -244,15 +244,30 @@ export interface CancelItemInput {
   quantity: number;
 }
 
-export async function confirmCancellation(
-  entityType: string,
-  entityId: string,
-  storeId: string,
-  userId: string,
-  cancellationReasonId: string,
-  comment?: string | null,
-  items?: CancelItemInput[]
-) {
+export interface ConfirmCancellationInput {
+  entityType: string;
+  entityId: string;
+  storeId: string;
+  userId: string;
+  cancellationReasonId: string;
+  comment?: string | null;
+  items?: CancelItemInput[];
+  type?: 'FULL' | 'PARTIAL' | 'REFUND';
+  cajaSessionId?: string | null;
+}
+
+export async function confirmCancellation(input: ConfirmCancellationInput) {
+  const {
+    entityType,
+    entityId,
+    storeId,
+    userId,
+    cancellationReasonId,
+    comment,
+    items,
+    type = 'FULL',
+    cajaSessionId,
+  } = input;
   // Validar que el motivo exista y pertenezca a la tienda
   const reasonRecord = await prisma.cancellationReason.findFirst({
     where: { id: cancellationReasonId, storeId },
@@ -261,11 +276,28 @@ export async function confirmCancellation(
     throw ApiError.notFound('Motivo de cancelación no encontrado', 'REASON_NOT_FOUND');
   }
 
+  // Para REFUND, validar que la sesión de caja exista y esté abierta
+  if (type === 'REFUND') {
+    if (!cajaSessionId) {
+      throw ApiError.badRequest('La sesión de caja es requerida para devoluciones', 'CAJA_SESSION_REQUIRED');
+    }
+    const session = await prisma.cajaSession.findFirst({
+      where: { id: cajaSessionId, storeId, status: 'OPEN' },
+    });
+    if (!session) {
+      throw ApiError.badRequest('La sesión de caja no existe o no está abierta', 'CAJA_SESSION_NOT_FOUND');
+    }
+  }
+
+  // Obtener configuración de tienda para días límite de devolución
+  const store = await prisma.store.findUnique({ where: { id: storeId } });
+  const diasLimiteDevolucion = store?.diasLimiteDevolucion ?? 7;
+
   return prisma.$transaction(async (tx) => {
     let entityNumber = '';
     let createdAt: Date;
     let total = new Prisma.Decimal(0);
-    let cancellationType: 'FULL' | 'PARTIAL' = 'FULL';
+    let cancellationType: 'FULL' | 'PARTIAL' | 'REFUND' = type;
     const cancellationItems: Prisma.CancellationItemCreateWithoutCancellationInput[] = [];
 
     switch (entityType) {
@@ -295,18 +327,32 @@ export async function confirmCancellation(
         entityNumber = sale.saleNumber;
         createdAt = sale.createdAt;
 
-        const { allowed, hoursLeft } = validateWithinHours(createdAt);
-        if (!allowed) {
-          throw ApiError.badRequest(
-            `Solo se puede cancelar dentro de las ${MAX_CANCELLATION_HOURS} horas posteriores a la operación. Tiempo restante: ${hoursLeft.toFixed(1)} horas`,
-            'CANCEL_WINDOW_EXPIRED'
-          );
+        // Para REFUND usar los días límite configurados de la tienda;
+        // para cancelaciones usar 24 horas fijas.
+        if (type === 'REFUND') {
+          const maxHours = diasLimiteDevolucion * 24;
+          const { allowed, hoursLeft } = validateWithinHours(createdAt, maxHours);
+          if (!allowed) {
+            throw ApiError.badRequest(
+              `Solo se puede devolver dentro de los ${diasLimiteDevolucion} días posteriores a la operación. Tiempo restante: ${(hoursLeft / 24).toFixed(1)} días`,
+              'CANCEL_WINDOW_EXPIRED'
+            );
+          }
+        } else {
+          const { allowed, hoursLeft } = validateWithinHours(createdAt);
+          if (!allowed) {
+            throw ApiError.badRequest(
+              `Solo se puede cancelar dentro de las ${MAX_CANCELLATION_HOURS} horas posteriores a la operación. Tiempo restante: ${hoursLeft.toFixed(1)} horas`,
+              'CANCEL_WINDOW_EXPIRED'
+            );
+          }
         }
 
         const isPartial = !!items && items.length > 0;
+        const isRefund = type === 'REFUND';
 
-        if (isPartial) {
-          cancellationType = 'PARTIAL';
+        if (isPartial || isRefund) {
+          cancellationType = isRefund ? 'REFUND' : 'PARTIAL';
 
           // Cantidad ya cancelada por artículo (cancelaciones parciales previas)
           const itemIds = items!.map((i) => i.saleItemId);
@@ -376,6 +422,32 @@ export async function confirmCancellation(
                 data: { canceledAt: new Date(), canceledBy: userId },
               });
             }
+          }
+
+          // Para REFUND: crear movimiento de caja (EGRESO en efectivo) por el monto reembolsado
+          if (isRefund && cajaSessionId && total.greaterThan(0)) {
+            // Buscar o crear motivo "Reembolso al cliente"
+            let refundReason = await tx.cajaMovimientoMotivo.findFirst({
+              where: { storeId, name: 'Reembolso al cliente', isActive: true },
+            });
+            if (!refundReason) {
+              refundReason = await tx.cajaMovimientoMotivo.create({
+                data: { storeId, name: 'Reembolso al cliente', tipo: 'EGRESO', isActive: true },
+              });
+            }
+
+            await tx.cajaMovimiento.create({
+              data: {
+                storeId,
+                cajaSessionId,
+                userId,
+                tipo: 'EGRESO',
+                metodo: 'CASH',
+                monto: total,
+                motivoId: refundReason.id,
+                motivoTexto: `Reembolso por devolución - Venta ${entityNumber}`,
+              },
+            });
           }
 
           // La venta permanece COMPLETADA; no se marca como cancelada.
@@ -549,7 +621,7 @@ export async function listCancellations(storeId: string, filters?: {
   endDate?: string;
   entityType?: string;
   cancellationReasonId?: string;
-  type?: 'FULL' | 'PARTIAL';
+  type?: 'FULL' | 'PARTIAL' | 'REFUND';
 }) {
   const where: Record<string, unknown> = { storeId };
 
