@@ -59,23 +59,23 @@ async function main() {
     tipo: 'ENTRADA' | 'SALIDA';
     departamento?: string | null;
   }> = [
-    // ENTRADA (suma stock)
-    { name: 'Ajuste positivo (conteo físico)', tipo: 'ENTRADA' },
-    { name: 'Devolución de cliente', tipo: 'ENTRADA' },
-    { name: 'Producto reubicado o encontrado', tipo: 'ENTRADA' },
-    { name: 'Compra no registrada', tipo: 'ENTRADA' },
-    { name: 'Compra a proveedor', tipo: 'ENTRADA' },
-    // SALIDA (resta stock: merma, pérdida, etc.)
-    { name: 'Merma / producto echado a perder', tipo: 'SALIDA', departamento: 'Abarrotes' },
-    { name: 'Caducado / vencido', tipo: 'SALIDA' },
-    { name: 'Rotura / daño accidental', tipo: 'SALIDA' },
-    { name: 'Robo / extravío', tipo: 'SALIDA' },
-    { name: 'Venta no registrada', tipo: 'SALIDA' },
-    { name: 'Degustación / muestra', tipo: 'SALIDA' },
-    { name: 'Traslado a otra sucursal', tipo: 'SALIDA' },
-    { name: 'Error de captura en venta', tipo: 'SALIDA' },
-    { name: 'Cancelación de compra', tipo: 'SALIDA' },
-  ];
+      // ENTRADA (suma stock)
+      { name: 'Ajuste positivo (conteo físico)', tipo: 'ENTRADA' },
+      { name: 'Devolución de cliente', tipo: 'ENTRADA' },
+      { name: 'Producto reubicado o encontrado', tipo: 'ENTRADA' },
+      { name: 'Compra no registrada', tipo: 'ENTRADA' },
+      { name: 'Compra a proveedor', tipo: 'ENTRADA' },
+      // SALIDA (resta stock: merma, pérdida, etc.)
+      { name: 'Merma / producto echado a perder', tipo: 'SALIDA', departamento: 'Abarrotes' },
+      { name: 'Caducado / vencido', tipo: 'SALIDA' },
+      { name: 'Rotura / daño accidental', tipo: 'SALIDA' },
+      { name: 'Robo / extravío', tipo: 'SALIDA' },
+      { name: 'Venta no registrada', tipo: 'SALIDA' },
+      { name: 'Degustación / muestra', tipo: 'SALIDA' },
+      { name: 'Traslado a otra sucursal', tipo: 'SALIDA' },
+      { name: 'Error de captura en venta', tipo: 'SALIDA' },
+      { name: 'Cancelación de compra', tipo: 'SALIDA' },
+    ];
 
   for (const m of motivosBase) {
     await prisma.movementReason.upsert({
@@ -440,13 +440,13 @@ async function main() {
       await prisma.promotion.upsert({
         where: { id: 'demo-promo-combo-atun' },
         update: {},
-      create: {
-        id: 'demo-promo-combo-atun',
-        storeId: store.id,
-        name: 'Combo Atún + Pan Francés',
-        description: 'Pack a precio especial.',
-        type: 'COMBO',
-        config: { comboPrice: 30 },
+        create: {
+          id: 'demo-promo-combo-atun',
+          storeId: store.id,
+          name: 'Combo Atún + Pan Francés',
+          description: 'Pack a precio especial.',
+          type: 'COMBO',
+          config: { comboPrice: 30 },
           startsAt: new Date('2026-01-01T00:00:00Z'),
           endsAt: new Date('2027-12-31T23:59:59Z'),
           isActive: true,
