@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import { PaymentMethod, Role, UnidadVenta, MovementTipo } from '../../generated/prisma/client.js';
 
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+const passwordField = (label: string) =>
+  z
+    .string()
+    .min(8, `${label}: mínimo 8 caracteres`)
+    .max(128, `${label}: máximo 128 caracteres`)
+    .regex(PASSWORD_REGEX, `${label}: debe contener al menos una mayúscula, una minúscula y un número`);
+
 export const loginSchema = z.object({
   email: z.string().email('Email inválido'),
   password: z.string().min(1, 'La contraseña es requerida'),
@@ -155,7 +163,7 @@ export const supplierTxSchema = z.object({
 
 export const createUserSchema = z.object({
   email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'Mínimo 6 caracteres'),
+  password: passwordField('Contraseña'),
   name: z.string().min(1, 'El nombre es requerido'),
   role: z.nativeEnum(Role),
   storeId: z.string().min(1),
@@ -164,7 +172,7 @@ export const createUserSchema = z.object({
 export const updateUserSchema = z
   .object({
     email: z.string().email('Email inválido').optional(),
-    password: z.string().min(6, 'Mínimo 6 caracteres').optional(),
+    password: passwordField('Contraseña').optional(),
     name: z.string().min(1).optional(),
     role: z.nativeEnum(Role).optional(),
     isActive: z.boolean().optional(),
@@ -358,7 +366,7 @@ export const selectStoreSchema = z.object({
 
 export const cambiarPasswordSchema = z.object({
   currentPassword: z.string().min(1, 'La contraseña actual es requerida'),
-  newPassword: z.string().min(6, 'La nueva contraseña debe tener mínimo 6 caracteres'),
+  newPassword: passwordField('Nueva contraseña'),
 });
 
 export const dailyReportSchema = z.object({

@@ -1,11 +1,53 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
+import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
+import { prisma } from '../config/prisma';
+import { sha256 } from '../utils/tokenHash';
 import { logger } from '../config/logger';
+import { AuthedUser, JwtPayload } from '../types';
 
 const storeChannels = new Map<string, Set<string>>();
 
 export let io: Server;
+
+async function authenticateSocket(socket: Socket): Promise<AuthedUser | null> {
+  try {
+    const token =
+      socket.handshake.auth?.token ??
+      socket.handshake.headers?.authorization?.replace('Bearer ', '');
+
+    if (!token || typeof token !== 'string') return null;
+
+    const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+
+    const revoked = await prisma.revokedToken.findUnique({
+      where: { tokenHash: sha256(token) },
+    });
+    if (revoked) return null;
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      include: {
+        userStores: { select: { storeId: true, role: true } },
+      },
+    });
+
+    if (!user || !user.isActive) return null;
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      storeId: payload.storeId,
+      stores: user.userStores.map((us) => ({ storeId: us.storeId, role: us.role })),
+      isActive: user.isActive,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export function initSocket(server: HttpServer): Server {
   io = new Server(server, {
@@ -15,11 +57,27 @@ export function initSocket(server: HttpServer): Server {
     },
   });
 
+  io.use(async (socket, next) => {
+    const user = await authenticateSocket(socket);
+    if (!user) {
+      return next(new Error('Autenticación fallida'));
+    }
+    socket.data.user = user;
+    next();
+  });
+
   io.on('connection', (socket: Socket) => {
-    logger.debug(`Socket connected: ${socket.id}`);
+    const user = socket.data.user as AuthedUser;
+    logger.debug(`Socket connected: ${socket.id} (user: ${user.id})`);
 
     socket.on('join-store', ({ storeId }: { storeId?: string }) => {
       if (!storeId || typeof storeId !== 'string') return;
+
+      const belongsToStore = user.stores.some((s) => s.storeId === storeId);
+      if (!belongsToStore) {
+        logger.warn(`Socket ${socket.id} denied join-store:${storeId} (unauthorized)`);
+        return;
+      }
 
       socket.join(`store:${storeId}`);
 
@@ -45,9 +103,6 @@ export function emitToStore(storeId: string, event: string, data: unknown): void
   io?.to(`store:${storeId}`).emit(event, data);
 }
 
-// Emite a toda la sala de la tienda excepto al socket indicado (p. ej. la estación
-// que originó la acción), para no notificarle su propio evento. Acepta el valor crudo
-// del header 'x-socket-id' (string | string[] | undefined).
 export function emitToStoreExcept(
   storeId: string,
   event: string,
