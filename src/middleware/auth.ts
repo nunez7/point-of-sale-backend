@@ -24,7 +24,6 @@ export const requireAuth = asyncHandler(
       throw ApiError.unauthorized('Token inválido o expirado', 'INVALID_TOKEN');
     }
 
-    // Blacklist check (logout token)
     const revoked = await prisma.revokedToken.findUnique({
       where: { tokenHash: sha256(token) },
     });
@@ -32,35 +31,18 @@ export const requireAuth = asyncHandler(
       throw ApiError.unauthorized('Token revocado', 'REVOKED_TOKEN');
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-      include: {
-        userStores: {
-          select: { storeId: true, role: true },
-        },
-      },
-    });
-
-    if (!user) {
-      throw ApiError.unauthorized('Usuario no encontrado', 'USER_NOT_FOUND');
-    }
-    if (!user.isActive) {
+    if (!payload.isActive) {
       throw ApiError.forbidden('Usuario inactivo', 'USER_INACTIVE');
     }
 
-    const stores = user.userStores.map((us) => ({
-      storeId: us.storeId,
-      role: us.role,
-    }));
-
     const authedUser: AuthedUser = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
+      id: payload.userId,
+      email: payload.email,
+      name: payload.name,
+      role: payload.role,
       storeId: payload.storeId,
-      stores,
-      isActive: user.isActive,
+      stores: payload.stores,
+      isActive: payload.isActive,
     };
 
     req.user = authedUser;

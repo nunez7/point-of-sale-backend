@@ -462,114 +462,115 @@ export async function corteCaja(
 }
 
 export async function productsReport(storeId: string) {
-  const saleItems = await prisma.saleItem.findMany({
-    where: { sale: { storeId, status: 'COMPLETED' }, canceledAt: null },
-    select: {
-      productId: true,
-      unitPrice: true,
-      quantity: true,
-      profit: true,
-      product: { select: { name: true, category: { select: { name: true } } } },
-    },
+  type ProductRow = {
+    productId: string;
+    productName: string;
+    category: string | null;
+    quantitysold: bigint;
+    revenue: unknown;
+    profit: unknown;
+  };
+
+  const rows = await prisma.$queryRaw<ProductRow[]>`
+    SELECT
+      si."productId",
+      p.name AS "productName",
+      c.name AS category,
+      SUM(si.quantity)::bigint AS quantitySold,
+      SUM(si."unitPrice" * si.quantity) AS revenue,
+      SUM(si.profit) AS profit
+    FROM "SaleItem" si
+    JOIN "Sale" s ON s.id = si."saleId"
+    JOIN "Product" p ON p.id = si."productId"
+    LEFT JOIN "Category" c ON c.id = p."categoryId"
+    WHERE s."storeId" = ${storeId}
+      AND s.status = 'COMPLETED'
+      AND si."canceledAt" IS NULL
+    GROUP BY si."productId", p.name, c.name
+    ORDER BY revenue DESC
+  `;
+
+  return rows.map((r) => {
+    const revenue = Number(r.revenue);
+    const profit = Number(r.profit);
+    return {
+      productId: r.productId,
+      productName: r.productName,
+      quantitySold: Number(r.quantitysold),
+      revenue,
+      profit,
+      profitMargin: revenue > 0 ? (profit / revenue) * 100 : 0,
+    };
   });
-
-  const perProduct = new Map<
-    string,
-    { productId: string; name: string; category: string | null; quantity: number; revenue: number; profit: number }
-  >();
-  for (const item of saleItems) {
-    const entry =
-      perProduct.get(item.productId) ?? {
-        productId: item.productId,
-        name: item.product.name,
-        category: item.product.category?.name ?? null,
-        quantity: 0,
-        revenue: 0,
-        profit: 0,
-      };
-    entry.quantity += Number(item.quantity);
-    entry.revenue += Number(item.unitPrice) * Number(item.quantity);
-    entry.profit += Number(item.profit);
-    perProduct.set(item.productId, entry);
-  }
-
-  return Array.from(perProduct.values())
-    .map((p) => ({
-      productId: p.productId,
-      productName: p.name,
-      quantitySold: p.quantity,
-      revenue: p.revenue,
-      profit: p.profit,
-      profitMargin: p.revenue > 0 ? (p.profit / p.revenue) * 100 : 0,
-    }))
-    .sort((a, b) => b.revenue - a.revenue);
 }
 
 export async function profitMarginByCategory(storeId: string) {
   await validateStore(storeId);
 
-  const saleItems = await prisma.saleItem.findMany({
-    where: { sale: { storeId, status: 'COMPLETED' }, canceledAt: null },
-    select: {
-      productId: true,
-      unitPrice: true,
-      quantity: true,
-      profit: true,
-      product: { select: { name: true, category: { select: { name: true } } } },
-    },
+  type CategoryRow = {
+    category: string;
+    revenue: unknown;
+    profit: unknown;
+  };
+
+  const rows = await prisma.$queryRaw<CategoryRow[]>`
+    SELECT
+      COALESCE(c.name, 'Sin categoría') AS category,
+      SUM(si."unitPrice" * si.quantity) AS revenue,
+      SUM(si.profit) AS profit
+    FROM "SaleItem" si
+    JOIN "Sale" s ON s.id = si."saleId"
+    JOIN "Product" p ON p.id = si."productId"
+    LEFT JOIN "Category" c ON c.id = p."categoryId"
+    WHERE s."storeId" = ${storeId}
+      AND s.status = 'COMPLETED'
+      AND si."canceledAt" IS NULL
+    GROUP BY c.name
+  `;
+
+  return rows.map((r) => {
+    const revenue = Number(r.revenue);
+    const profit = Number(r.profit);
+    return {
+      category: r.category,
+      revenue,
+      cost: revenue - profit,
+      profit,
+      profitMargin: revenue > 0 ? (profit / revenue) * 100 : 0,
+    };
   });
-
-  const perCategory = new Map<string, { revenue: number; profit: number }>();
-  for (const item of saleItems) {
-    const catName = item.product.category?.name ?? 'Sin categoría';
-    const entry = perCategory.get(catName) ?? { revenue: 0, profit: 0 };
-    entry.revenue += Number(item.unitPrice) * Number(item.quantity);
-    entry.profit += Number(item.profit);
-    perCategory.set(catName, entry);
-  }
-
-  return Array.from(perCategory.entries()).map(([name, v]) => ({
-    category: name,
-    revenue: v.revenue,
-    cost: v.revenue - v.profit,
-    profit: v.profit,
-    profitMargin: v.revenue > 0 ? (v.profit / v.revenue) * 100 : 0,
-  }));
 }
 
 export async function suppliersReport(storeId: string) {
   await validateStore(storeId);
 
-  const transactions = await prisma.supplierTransaction.findMany({
-    where: { storeId, status: 'COMPLETED' },
-    select: { id: true, supplierId: true, total: true, supplier: { select: { id: true, name: true } } },
-  });
+  type SupplierRow = {
+    supplierId: string;
+    supplierName: string;
+    totalPurchases: bigint;
+    totalSpent: unknown;
+  };
 
-  const perSupplier = new Map<
-    string,
-    { supplierId: string; name: string; count: number; total: number }
-  >();
-  for (const t of transactions) {
-    const entry =
-      perSupplier.get(t.supplierId) ?? {
-        supplierId: t.supplierId,
-        name: t.supplier.name,
-        count: 0,
-        total: 0,
-      };
-    entry.count += 1;
-    entry.total += Number(t.total);
-    perSupplier.set(t.supplierId, entry);
-  }
+  const rows = await prisma.$queryRaw<SupplierRow[]>`
+    SELECT
+      sup.id AS "supplierId",
+      sup.name AS "supplierName",
+      COUNT(*)::bigint AS "totalPurchases",
+      SUM(st.total) AS "totalSpent"
+    FROM "SupplierTransaction" st
+    JOIN "Supplier" sup ON sup.id = st."supplierId"
+    WHERE st."storeId" = ${storeId}
+      AND st.status = 'COMPLETED'
+    GROUP BY sup.id, sup.name
+    ORDER BY "totalSpent" DESC
+  `;
 
-  return Array.from(perSupplier.values())
-    .map((s) => ({
-      supplierId: s.supplierId,
-      supplierName: s.name,
-      totalPurchases: s.count,
-      totalSpent: s.total,
-    }))
-    .sort((a, b) => b.totalSpent - a.totalSpent);
+  return rows.map((r) => ({
+    supplierId: r.supplierId,
+    supplierName: r.supplierName,
+    totalPurchases: Number(r.totalPurchases),
+    totalSpent: Number(r.totalSpent),
+  }));
 }
 
 // Reporte de cierres de caja: una fila por sesión (una por caja/día), con
@@ -681,46 +682,66 @@ export async function cierreCaja(
     movMap.set(id, entry);
   }
 
-  const rows: CierreCajaFila[] = await Promise.all(sessions.map(async (s) => {
+  const rows: CierreCajaFila[] = [];
+
+  // Detalle de movimientos agrupados por motivo (1 query en vez de N)
+  type MovDetalleRow = {
+    cajaSessionId: string;
+    tipo: string;
+    metodo: string;
+    motivoId: string | null;
+    motivoTexto: string | null;
+    motivoName: string | null;
+    total: unknown;
+    cantidad: bigint;
+  };
+
+  const detalleRows: MovDetalleRow[] = sessionIds.length
+    ? await prisma.$queryRaw<MovDetalleRow[]>`
+        SELECT
+          cm."cajaSessionId",
+          cm.tipo,
+          cm.metodo,
+          cm."motivoId",
+          cm."motivoTexto",
+          COALESCE(
+            m.name,
+            CASE WHEN cm."motivoTexto" IS NOT NULL THEN 'Otro (texto libre)' ELSE 'Sin motivo' END
+          ) AS "motivoName",
+          SUM(cm.monto) AS total,
+          COUNT(*)::bigint AS cantidad
+        FROM "CajaMovimiento" cm
+        LEFT JOIN "CajaMovimientoMotivo" m ON m.id = cm."motivoId"
+        WHERE cm."cajaSessionId" = ANY(${sessionIds}::text[])
+          AND cm."storeId" = ${storeId}
+        GROUP BY cm."cajaSessionId", cm.tipo, cm.metodo, cm."motivoId", cm."motivoTexto", m.name
+        ORDER BY cm."cajaSessionId", cm.tipo, cm.metodo
+      `
+    : [];
+
+  // Indexar detalle por cajaSessionId
+  const detalleMap = new Map<string, { motivoName: string; tipo: 'INGRESO'|'EGRESO'; metodo: string; total: number; cantidad: number }[]>();
+  for (const row of detalleRows) {
+    const list = detalleMap.get(row.cajaSessionId) ?? [];
+    list.push({
+      motivoName: row.motivoName ?? 'Sin motivo',
+      tipo: row.tipo as 'INGRESO' | 'EGRESO',
+      metodo: row.metodo,
+      total: Number(row.total),
+      cantidad: Number(row.cantidad),
+    });
+    detalleMap.set(row.cajaSessionId, list);
+  }
+
+  for (const s of sessions) {
     const mov = movMap.get(s.id) ?? {
       ingresoCash: 0,
       egresoCash: 0,
       ingresoElectronic: 0,
       egresoElectronic: 0,
     };
-    // Movimientos agrupados por motivo (incluye nombre del motivo).
-    const movs = await prisma.cajaMovimiento.findMany({
-      where: { cajaSessionId: s.id, storeId },
-      select: {
-        tipo: true,
-        metodo: true,
-        monto: true,
-        motivoId: true,
-        motivoTexto: true,
-        motivo: { select: { name: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-    const grupos = new Map<string, { motivoName: string; tipo: 'INGRESO'|'EGRESO'; metodo: string; total: number; cantidad: number }>();
-    for (const m of movs) {
-      const motivoName = m.motivo?.name ?? (m.motivoTexto ? 'Otro (texto libre)' : 'Sin motivo');
-      const key = `${m.tipo}|${m.metodo}|${m.motivoId ?? ''}|${m.motivoTexto ?? ''}|${motivoName}`;
-      const ex = grupos.get(key);
-      if (ex) {
-        ex.total += Number(m.monto);
-        ex.cantidad += 1;
-      } else {
-        grupos.set(key, {
-          motivoName,
-          tipo: m.tipo as 'INGRESO'|'EGRESO',
-          metodo: m.metodo,
-          total: Number(m.monto),
-          cantidad: 1,
-        });
-      }
-    }
 
-    return {
+    rows.push({
       id: s.id,
       cajaId: s.cajaId,
       caja: s.caja?.name ?? 'Caja',
@@ -750,9 +771,9 @@ export async function cierreCaja(
       closingByMethod: (s.closingAmounts as Record<string, number> | null) ?? null,
       expectedByMethod: (s.expectedAmounts as Record<string, number> | null) ?? null,
       diffByMethod: (s.diffByMethod as Record<string, number> | null) ?? null,
-      movimientosPorMotivo: Array.from(grupos.values()),
-    };
-  }));
+      movimientosPorMotivo: detalleMap.get(s.id) ?? [],
+    });
+  }
 
   return { rows };
 }

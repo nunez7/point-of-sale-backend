@@ -161,6 +161,8 @@ export async function login(email: string, password: string) {
     storeId: activeStoreId,
     role: activeStoreRow.role,
     email: user.email,
+    name: user.name,
+    isActive: user.isActive,
     stores: userStores.map((s) => ({ storeId: s.storeId, role: s.role })),
   };
 
@@ -228,6 +230,8 @@ export async function selectStore(userId: string, storeId: string) {
     storeId,
     role: membership?.role ?? user.role,
     email: user.email,
+    name: user.name,
+    isActive: user.isActive,
     stores: userStores.map((s) => ({ storeId: s.storeId, role: s.role })),
   };
 

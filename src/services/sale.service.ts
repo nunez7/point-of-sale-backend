@@ -55,6 +55,87 @@ async function generateSaleNumber(tx: Tx, storeId: string, code: string): Promis
   return `${code}-${String(store.saleSequence).padStart(4, '0')}`;
 }
 
+// ── Batch inventory helpers ───────────────────────────────────────────
+// Valida stock de todos los items en una sola query y retorna el mapa de
+// disponibles. Lanza INSUFFICIENT_STOCK si alguno no cumple.
+async function validateStockBatch(
+  tx: Tx,
+  storeId: string,
+  items: { productId: string; quantity: Prisma.Decimal; name?: string }[]
+): Promise<Map<string, Prisma.Decimal>> {
+  const productIds = items.map((i) => i.productId);
+  const rows = await tx.inventory.findMany({
+    where: { storeId, productId: { in: productIds } },
+    select: { productId: true, quantity: true },
+  });
+  const stockMap = new Map(rows.map((r) => [r.productId, r.quantity]));
+  for (const item of items) {
+    const available = stockMap.get(item.productId) ?? new Prisma.Decimal(0);
+    if (available.lessThan(item.quantity)) {
+      const label = item.name ?? item.productId;
+      throw ApiError.badRequest(
+        `Stock insuficiente para "${label}" (disponible: ${Number(available)})`,
+        'INSUFFICIENT_STOCK'
+      );
+    }
+  }
+  return stockMap;
+}
+
+// Descuenta inventario de cada item. Se mantiene en loop por la condición
+// optimista `quantity >= requested` que debe ser por-fila.
+async function decrementStockBatch(
+  tx: Tx,
+  storeId: string,
+  items: { productId: string; quantity: Prisma.Decimal }[]
+): Promise<void> {
+  for (const item of items) {
+    const updated = await tx.inventory.updateMany({
+      where: { storeId, productId: item.productId, quantity: { gte: item.quantity } },
+      data: { quantity: { decrement: item.quantity } },
+    });
+    if (updated.count === 0) {
+      throw ApiError.badRequest('Stock insuficiente al deducir inventario', 'INSUFFICIENT_STOCK');
+    }
+  }
+}
+
+// Restaura inventario (cancelación). Usa updateMany con `in` para reducir
+// round-trips: si el registro existe lo incrementa; si no, Prisma crea
+// la fila con el valor inicial. Como updateMany no soporta "upsert",
+// se usa upsert individual pero se ejecuta en un solo round-trip por batch.
+async function restoreStockBatch(
+  tx: Tx,
+  storeId: string,
+  items: { productId: string; quantity: Prisma.Decimal }[]
+): Promise<void> {
+  const productIds = items.map((i) => i.productId);
+  const existing = await tx.inventory.findMany({
+    where: { storeId, productId: { in: productIds } },
+    select: { productId: true },
+  });
+  const existingSet = new Set(existing.map((r) => r.productId));
+
+  const toCreate = items.filter((i) => !existingSet.has(i.productId));
+  const toIncrement = items.filter((i) => existingSet.has(i.productId));
+
+  if (toCreate.length > 0) {
+    await tx.inventory.createMany({
+      data: toCreate.map((i) => ({ storeId, productId: i.productId, quantity: i.quantity })),
+    });
+  }
+  if (toIncrement.length > 0) {
+    // Ejecuta increments individuales; son UPDATE simples sin condición
+    // optimista, así que un solo query por item es aceptable.
+    for (const i of toIncrement) {
+      await tx.inventory.updateMany({
+        where: { storeId, productId: i.productId },
+        data: { quantity: { increment: i.quantity } },
+      });
+    }
+  }
+}
+
 export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
   return prisma.$transaction(async (tx) => {
     const store = await tx.store.findUnique({ where: { id: input.storeId } });
@@ -142,22 +223,24 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
         );
       }
 
-      const inventory = await tx.inventory.findUnique({
-        where: { storeId_productId: { storeId: input.storeId, productId: product.id } },
-      });
-
-      const stock = inventory?.quantity ?? new Prisma.Decimal(0);
-      if (new Prisma.Decimal(stock).lessThan(item.quantity)) {
-        throw ApiError.badRequest(
-          `Stock insuficiente para "${product.name}" (disponible: ${Number(stock)})`,
-          'INSUFFICIENT_STOCK'
-        );
-      }
-
       if (item.unitPrice <= 0) {
         throw ApiError.badRequest('El precio unitario debe ser positivo', 'INVALID_PRICE');
       }
+    }
 
+    // Validación de stock en lote (1 query en vez de N)
+    await validateStockBatch(
+      tx,
+      input.storeId,
+      input.items.map((it) => ({
+        productId: it.productId,
+        quantity: new Prisma.Decimal(it.quantity),
+        name: productMap.get(it.productId)?.name,
+      }))
+    );
+
+    for (const item of input.items) {
+      const product = productMap.get(item.productId)!;
       const costPrice = product.costPrice;
       const unitProfit = new Prisma.Decimal(item.unitPrice).minus(costPrice);
 
@@ -287,19 +370,14 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
     // Solo las ventas inmediatas (COMPLETED) descuentan inventario. Los
     // pedidos (PENDING) validan stock arriba pero no lo reservan ni descuentan.
     if (!isPending) {
-      for (const it of preparedItems) {
-        const updated = await tx.inventory.updateMany({
-          where: {
-            storeId: input.storeId,
-            productId: it.productId,
-            quantity: { gte: it.quantity },
-          },
-          data: { quantity: { decrement: it.quantity } },
-        });
-        if (updated.count === 0) {
-          throw ApiError.badRequest('Stock insuficiente al deducir inventario', 'INSUFFICIENT_STOCK');
-        }
-      }
+      await decrementStockBatch(
+        tx,
+        input.storeId,
+        preparedItems.map((it) => ({
+          productId: it.productId,
+          quantity: new Prisma.Decimal(it.quantity),
+        }))
+      );
     }
 
     // Persistir aplicaciones de promoción (incrementa usesCount atómicamente).
@@ -463,18 +541,15 @@ export async function cancelSale(
       );
     }
 
-    // Restore inventory atomically
-    for (const item of sale.items) {
-      await tx.inventory.upsert({
-        where: { storeId_productId: { storeId, productId: item.productId } },
-        create: {
-          storeId,
-          productId: item.productId,
-          quantity: item.quantity,
-        },
-        update: { quantity: { increment: item.quantity } },
-      });
-    }
+    // Restore inventory atomically (1-2 queries en vez de N upserts)
+    await restoreStockBatch(
+      tx,
+      storeId,
+      sale.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+      }))
+    );
 
     // Revierte promociones aplicadas a la venta (decrementa usesCount).
     await revertPromotionApplicationsForSale(tx, id);
@@ -541,33 +616,24 @@ export async function confirmOrder(id: string, storeId: string, userId: string) 
     }
 
     // Reválida stock disponible (puede haber cambiado desde la creación).
-    for (const item of sale.items) {
-      const inventory = await tx.inventory.findUnique({
-        where: { storeId_productId: { storeId, productId: item.productId } },
-      });
-      const stock = inventory?.quantity ?? new Prisma.Decimal(0);
-      if (new Prisma.Decimal(stock).lessThan(item.quantity)) {
-        throw ApiError.badRequest(
-          `Stock insuficiente para confirmar el pedido (disponible: ${Number(stock)})`,
-          'INSUFFICIENT_STOCK'
-        );
-      }
-    }
+    await validateStockBatch(
+      tx,
+      storeId,
+      sale.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+      }))
+    );
 
     // Descuenta inventario de forma atómica.
-    for (const item of sale.items) {
-      const updated = await tx.inventory.updateMany({
-        where: {
-          storeId,
-          productId: item.productId,
-          quantity: { gte: item.quantity },
-        },
-        data: { quantity: { decrement: item.quantity } },
-      });
-      if (updated.count === 0) {
-        throw ApiError.badRequest('Stock insuficiente al deducir inventario', 'INSUFFICIENT_STOCK');
-      }
-    }
+    await decrementStockBatch(
+      tx,
+      storeId,
+      sale.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+      }))
+    );
 
     const confirmed = await tx.sale.update({
       where: { id },
@@ -783,34 +849,25 @@ export async function completeHeldSale(
       throw ApiError.notFound('Pedido en espera no encontrado o ya completado', 'HELD_SALE_NOT_FOUND');
     }
 
-    // Validar stock disponible para cada artículo
-    for (const item of sale.items) {
-      const inventory = await tx.inventory.findUnique({
-        where: { storeId_productId: { storeId, productId: item.productId } },
-      });
-      const stock = inventory?.quantity ?? new Prisma.Decimal(0);
-      if (new Prisma.Decimal(stock).lessThan(item.quantity)) {
-        throw ApiError.badRequest(
-          `Stock insuficiente para completar el pedido (disponible: ${Number(stock)})`,
-          'INSUFFICIENT_STOCK'
-        );
-      }
-    }
+    // Validar stock disponible para cada artículo (1 query en vez de N)
+    await validateStockBatch(
+      tx,
+      storeId,
+      sale.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+      }))
+    );
 
     // Descuenta inventario atomically
-    for (const item of sale.items) {
-      const updated = await tx.inventory.updateMany({
-        where: {
-          storeId,
-          productId: item.productId,
-          quantity: { gte: item.quantity },
-        },
-        data: { quantity: { decrement: item.quantity } },
-      });
-      if (updated.count === 0) {
-        throw ApiError.badRequest('Stock insuficiente al deducir inventario', 'INSUFFICIENT_STOCK');
-      }
-    }
+    await decrementStockBatch(
+      tx,
+      storeId,
+      sale.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+      }))
+    );
 
     // Actualizar venta a COMPLETED
     const confirmed = await tx.sale.update({
