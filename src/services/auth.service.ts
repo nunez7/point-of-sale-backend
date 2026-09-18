@@ -432,35 +432,33 @@ export async function verifyCurrentPassword(userId: string, currentPassword: str
   return { valid: true };
 }
 
-export async function authorizeCajaClose(
+type CajaPurpose = 'OPEN_CAJA' | 'CLOSE_CAJA';
+
+async function authorizeCajaRole(
   storeId: string,
   email: string,
-  password: string
+  password: string,
+  purpose: CajaPurpose
 ) {
+  const label = purpose === 'CLOSE_CAJA' ? 'cierre' : 'apertura';
+  const code = purpose === 'CLOSE_CAJA'
+    ? 'CLOSE_CAJA_AUTHORIZATION_REQUIRED'
+    : 'OPEN_CAJA_AUTHORIZATION_REQUIRED';
+
   const user = await prisma.user.findFirst({
-    where: {
-      email,
-      isActive: true,
-      userStores: { some: { storeId } },
-    },
+    where: { email, isActive: true, userStores: { some: { storeId } } },
     select: { id: true, email: true, password: true, role: true },
   });
   const valid = user ? await bcrypt.compare(password, user.password) : false;
   if (!valid || (user?.role !== Role.ADMIN && user?.role !== Role.GERENTE)) {
     throw ApiError.forbidden(
-      'Solo un administrador o gerente puede autorizar el cierre',
-      'CLOSE_CAJA_AUTHORIZATION_REQUIRED'
+      `Solo un administrador o gerente puede autorizar la ${label}`,
+      code
     );
   }
 
   const authorizationToken = jwt.sign(
-    {
-      userId: user!.id,
-      storeId,
-      role: user!.role,
-      email: user!.email,
-      purpose: 'CLOSE_CAJA',
-    },
+    { userId: user!.id, storeId, role: user!.role, email: user!.email, purpose },
     env.JWT_SECRET,
     { expiresIn: '5m' }
   );
@@ -468,38 +466,10 @@ export async function authorizeCajaClose(
   return { authorized: true, authorizationToken };
 }
 
-export async function authorizeCajaOpen(
-  storeId: string,
-  email: string,
-  password: string
-) {
-  const user = await prisma.user.findFirst({
-    where: {
-      email,
-      isActive: true,
-      userStores: { some: { storeId } },
-    },
-    select: { id: true, email: true, password: true, role: true },
-  });
-  const valid = user ? await bcrypt.compare(password, user.password) : false;
-  if (!valid || (user?.role !== Role.ADMIN && user?.role !== Role.GERENTE)) {
-    throw ApiError.forbidden(
-      'Solo un administrador o gerente puede autorizar la apertura',
-      'OPEN_CAJA_AUTHORIZATION_REQUIRED'
-    );
-  }
+export function authorizeCajaClose(storeId: string, email: string, password: string) {
+  return authorizeCajaRole(storeId, email, password, 'CLOSE_CAJA');
+}
 
-  const authorizationToken = jwt.sign(
-    {
-      userId: user!.id,
-      storeId,
-      role: user!.role,
-      email: user!.email,
-      purpose: 'OPEN_CAJA',
-    },
-    env.JWT_SECRET,
-    { expiresIn: '5m' }
-  );
-
-  return { authorized: true, authorizationToken };
+export function authorizeCajaOpen(storeId: string, email: string, password: string) {
+  return authorizeCajaRole(storeId, email, password, 'OPEN_CAJA');
 }

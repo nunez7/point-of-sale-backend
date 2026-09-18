@@ -3,6 +3,7 @@ import { Prisma } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 import { mexicoStartOfDay, mexicoEndOfDay } from '../utils/dates';
 import { createSupplierCancelMovementsInTx } from './stockMovement.service';
+import { requireOpenSession } from './cajaSession.service';
 
 const MAX_CANCELLATION_HOURS = 24;
 
@@ -281,12 +282,7 @@ export async function confirmCancellation(input: ConfirmCancellationInput) {
     if (!cajaSessionId) {
       throw ApiError.badRequest('La sesión de caja es requerida para devoluciones', 'CAJA_SESSION_REQUIRED');
     }
-    const session = await prisma.cajaSession.findFirst({
-      where: { id: cajaSessionId, storeId, status: 'OPEN' },
-    });
-    if (!session) {
-      throw ApiError.badRequest('La sesión de caja no existe o no está abierta', 'CAJA_SESSION_NOT_FOUND');
-    }
+    await requireOpenSession(prisma, cajaSessionId, storeId);
   }
 
   // Obtener configuración de tienda para días límite de devolución

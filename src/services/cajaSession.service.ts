@@ -583,6 +583,73 @@ export async function getActiveSession(storeId: string, userId: string) {
   });
 }
 
+// ── Helpers de sesión compartidos ─────────────────────────────────────
+
+// Resuelve la sesión de caja para una operación: si viene cajaSessionId
+// validada; si no, auto-resolve la sesión abierta del usuario.
+export async function resolveCajaSession(
+  tx: Prisma.TransactionClient,
+  storeId: string,
+  userId: string,
+  cajaSessionId?: string | null
+): Promise<string> {
+  if (cajaSessionId) {
+    const session = await tx.cajaSession.findFirst({
+      where: { id: cajaSessionId, storeId, status: 'OPEN' },
+    });
+    if (!session) {
+      throw ApiError.badRequest(
+        'La sesión de caja no es válida o no está abierta',
+        'CAJA_SESSION_INVALID'
+      );
+    }
+    return cajaSessionId;
+  }
+  const active = await tx.cajaSession.findFirst({
+    where: {
+      storeId,
+      status: 'OPEN',
+      OR: [
+        { userId },
+        { caja: { assignedUserId: userId } },
+      ],
+    },
+    orderBy: { openedAt: 'desc' },
+  });
+  if (!active) {
+    throw ApiError.badRequest(
+      'Debe abrir la caja antes de continuar',
+      'CAJA_SESSION_REQUIRED'
+    );
+  }
+  return active.id;
+}
+
+// Valida que una sesión exista y esté abierta (para uso dentro de tx).
+export async function requireOpenSession(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  storeId: string
+) {
+  const session = await tx.cajaSession.findFirst({
+    where: { id: sessionId, storeId, status: 'OPEN' },
+  });
+  if (!session) {
+    throw ApiError.badRequest(
+      'La sesión de caja no es válida o no está abierta',
+      'CAJA_SESSION_INVALID'
+    );
+  }
+  return session;
+}
+
+// Obtiene la sesión abierta de una caja específica (sin lanzar error).
+export async function findOpenSessionForCaja(storeId: string, cajaId: string) {
+  return prisma.cajaSession.findFirst({
+    where: { cajaId, storeId, status: 'OPEN' },
+  });
+}
+
 export interface SessionFilters {
   cajaId?: string;
   status?: 'OPEN' | 'CLOSED';

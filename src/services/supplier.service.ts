@@ -3,7 +3,8 @@ import { Prisma, MovementTipo, PaymentMethod } from '../../generated/prisma/clie
 import { ApiError } from '../utils/ApiError';
 import { mexicoStartOfDay, mexicoEndOfDay } from '../utils/dates';
 import { SupplierTxItemInput } from '../types';
-import { createPurchaseMovementsInTx } from './stockMovement.service';
+import { createPurchaseMovementsInTx, createSupplierCancelMovementsInTx } from './stockMovement.service';
+import { resolveCajaSession } from './cajaSession.service';
 
 const PURCHASE_REASON_NAME = 'Compra a proveedor';
 const DEFAULT_MARGIN_PCT = 16;
@@ -260,36 +261,7 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
     // efectivo de dueño, queda registrada sin afectar el corte.
     const paidFrom = input.paidFrom ?? "DUENO";
     if (paidFrom === "CAJA") {
-      if (input.cajaSessionId) {
-        const session = await tx.cajaSession.findFirst({
-          where: { id: input.cajaSessionId, storeId: input.storeId, status: 'OPEN' },
-        });
-        if (!session) {
-          throw ApiError.badRequest(
-            'La sesión de caja no es válida o no está abierta',
-            'CAJA_SESSION_INVALID'
-          );
-        }
-      } else {
-        const active = await tx.cajaSession.findFirst({
-          where: {
-            storeId: input.storeId,
-            status: 'OPEN',
-            OR: [
-              { userId: input.userId },
-              { caja: { assignedUserId: input.userId } },
-            ],
-          },
-          orderBy: { openedAt: 'desc' },
-        });
-        if (!active) {
-          throw ApiError.badRequest(
-            'Debe abrir la caja antes de registrar compras con dinero de caja',
-            'CAJA_SESSION_REQUIRED'
-          );
-        }
-        input.cajaSessionId = active.id;
-      }
+      input.cajaSessionId = await resolveCajaSession(tx, input.storeId, input.userId, input.cajaSessionId);
     }
 
     let total = new Prisma.Decimal(0);
@@ -430,62 +402,18 @@ export async function cancelSupplierTransaction(
       );
     }
 
-    const reason = await getOrCreatePurchaseReason(tx, storeId);
-
     // Movimiento inverso (SALIDA) por cada ítem para mantener el inventario
     // y el reporte coherentes y 100% trazables.
-    for (const item of txRecord.items) {
-      const quantity = new Prisma.Decimal(item.quantity);
-      const inventory = await tx.inventory.findUnique({
-        where: { storeId_productId: { storeId, productId: item.productId } },
-      });
-      const before = inventory ? inventory.quantity : new Prisma.Decimal(0);
-      if (before.lessThan(quantity)) {
-        throw ApiError.badRequest(
-          'No se puede cancelar: el producto tendría stock negativo',
-          'INSUFFICIENT_STOCK_TO_CANCEL'
-        );
-      }
-      const updated = await tx.inventory.update({
-        where: { storeId_productId: { storeId, productId: item.productId } },
-        data: { quantity: { decrement: quantity } },
-      });
-
-      const movement = await tx.stockMovement.create({
-        data: {
-          storeId,
-          productId: item.productId,
-          userId,
-          reasonId: reason.id,
-          tipo: MovementTipo.SALIDA,
-          quantity,
-          balanceBefore: before,
-          balanceAfter: updated.quantity,
-          unitCost: item.unitCost,
-          comment: `Anulación de compra ${txRecord.reference}`,
-          referenceType: 'SUPPLIER_TX',
-          referenceId: id,
-          status: 'ACTIVE',
-        },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          storeId,
-          userId,
-          action: 'STOCK_MOVEMENT',
-          entity: 'StockMovement',
-          entityId: movement.id,
-          metadata: {
-            tipo: MovementTipo.SALIDA,
-            productId: item.productId,
-            quantity: Number(quantity),
-            reason: 'Compra a proveedor',
-            referenceId: id,
-          },
-        },
-      });
-    }
+    await createSupplierCancelMovementsInTx(tx, {
+      storeId,
+      userId,
+      referenceId: id,
+      items: txRecord.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        unitCost: item.unitCost,
+      })),
+    });
 
     const canceled = await tx.supplierTransaction.update({
       where: { id },

@@ -28,3 +28,23 @@ export async function audit(input: AuditInput): Promise<void> {
     console.error('Audit log failed:', err);
   }
 }
+
+export async function auditTx(
+  tx: Prisma.TransactionClient,
+  input: AuditInput
+): Promise<void> {
+  try {
+    await tx.auditLog.create({
+      data: {
+        storeId: input.storeId,
+        userId: input.userId,
+        action: input.action,
+        entity: input.entity,
+        entityId: input.entityId,
+        metadata: input.metadata,
+      },
+    });
+  } catch (err) {
+    console.error('Audit log failed:', err);
+  }
+}
