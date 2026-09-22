@@ -139,6 +139,16 @@ enum MovementTipo {
   @@map("movement_tipo")
 }
 
+enum CotizacionStatus {
+  BORRADOR
+  ENVIADA
+  ACEPTADA
+  CANCELADA
+  VENCIDA
+
+  @@map("cotizacion_status")
+}
+
 model Store {
   id        String   @id @default(uuid())
   name      String
@@ -153,6 +163,7 @@ model Store {
   facturaSequence Int @default(0)
   purchaseSequence Int @default(0)
   ticketSequence Int @default(0)
+  cotizacionSequence Int @default(0)
   notifyOutOfStock Boolean @default(true)
   notifyLowStock   Boolean @default(true)
   controlCajas Boolean @default(false)
@@ -192,6 +203,7 @@ model Store {
   promotionApplications PromotionApplication[]
   tickets         Ticket[]
   ticketConfigs   TicketConfig[]
+  cotizaciones    Cotizacion[]
 
   @@map("store")
 }
@@ -222,6 +234,7 @@ model User {
   tickets         Ticket[]
   ticketComments  TicketComment[]
   assignedTickets Ticket[] @relation("TicketAssignedSoporte")
+  cotizaciones    Cotizacion[]
 
   @@map("user")
 }
@@ -298,6 +311,7 @@ model Product {
 
   inventories          Inventory[]
   saleItems            SaleItem[]
+  cotizacionItems      CotizacionItem[]
   supplierTxItems      SupplierTransactionItem[]
   stockMovements       StockMovement[]
   promotionItems       PromotionItem[]
@@ -446,6 +460,7 @@ model Sale {
 
   factura Factura?
   promotionApplications PromotionApplication[]
+  convertedFromCotizacion Cotizacion?
 
   @@index([storeId, createdAt])
   @@index([saleNumber])
@@ -482,6 +497,56 @@ model SaleItem {
   @@index([productId])
 
   @@map("sale_item")
+}
+
+model Cotizacion {
+  id               String            @id @default(uuid())
+  cotizacionNumber String            @unique
+  storeId          String
+  store            Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User              @relation(fields: [userId], references: [id])
+  clienteId        String?
+  cliente          Cliente?          @relation(fields: [clienteId], references: [id])
+  items            CotizacionItem[]
+  subtotal         Decimal           @db.Decimal(12, 2)
+  discount         Decimal           @db.Decimal(12, 2) @default(0)
+  total            Decimal           @db.Decimal(12, 2)
+  status           CotizacionStatus  @default(BORRADOR)
+  notes            String?
+  validUntil       DateTime?
+  sentAt           DateTime?
+  acceptedAt       DateTime?
+  canceledAt       DateTime?
+  canceledBy       String?
+  convertedSaleId  String?  @unique
+  convertedSale    Sale?             @relation(fields: [convertedSaleId], references: [id])
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([storeId, createdAt])
+  @@index([cotizacionNumber])
+  @@index([status])
+  @@index([clienteId])
+  @@index([userId])
+
+  @@map("cotizacion")
+}
+
+model CotizacionItem {
+  id              String      @id @default(uuid())
+  cotizacionId    String
+  cotizacion      Cotizacion  @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product     @relation(fields: [productId], references: [id])
+  quantity        Decimal     @db.Decimal(12, 3)
+  unidad          String?
+  unitPrice       Decimal     @db.Decimal(12, 2)
+
+  @@index([cotizacionId])
+  @@index([productId])
+
+  @@map("cotizacion_item")
 }
 
 model Supplier {
@@ -601,6 +666,8 @@ model Cliente {
   facturas Factura[]
 
   sales    Sale[]
+
+  cotizaciones Cotizacion[]
 
   @@unique([storeId, rfc])
   @@index([storeId, nombreRazonSocial])

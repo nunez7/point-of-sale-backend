@@ -21,6 +21,7 @@ import inventoryRoutes from './routes/inventory.routes';
 import cajaRoutes from './routes/caja.routes';
 import promotionRoutes from './routes/promotion.routes';
 import soporteRoutes from './routes/soporte.routes';
+import cotizacionRoutes from './routes/cotizacion.routes';
 
 export const app = express();
 
@@ -64,6 +65,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/cajas', cajaRoutes);
 app.use('/api/promotions', promotionRoutes);
 app.use('/api/soporte', soporteRoutes);
+app.use('/api/cotizaciones', cotizacionRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

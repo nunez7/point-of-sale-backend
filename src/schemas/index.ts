@@ -830,3 +830,44 @@ export const auditLogsQuerySchema = z.object({
   page: z.string().optional(),
   pageSize: z.string().optional(),
 });
+
+// ── Cotizaciones ──────────────────────────────────────────────────────────────
+
+export const cotizacionSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        productId: z.string().min(1, 'Producto requerido'),
+        quantity: cantidadPositiva,
+        unitPrice: positiveDecimal,
+      })
+    )
+    .min(1, 'Debe agregar al menos un producto'),
+  discount: z.number().min(0, 'El descuento no puede ser negativo').default(0),
+  clienteId: z.string().min(1).nullable().optional(),
+  notes: z.string().max(500).nullable().optional(),
+  validUntil: z.string().datetime().nullable().optional(),
+  status: z.enum(['BORRADOR', 'ENVIADA']).default('BORRADOR'),
+});
+
+export const cotizacionStatusSchema = z.object({
+  status: z.enum(['ENVIADA', 'ACEPTADA', 'CANCELADA']),
+  motivo: z.string().max(500).optional(),
+});
+
+export const cotizacionQuerySchema = z.object({
+  status: z
+    .enum(['BORRADOR', 'ENVIADA', 'ACEPTADA', 'CANCELADA', 'VENCIDA', 'ALL'])
+    .default('ALL')
+    .optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha inicial debe tener formato YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
+    .optional(),
+  clienteId: z.string().uuid().optional(),
+  search: z.string().max(120).optional(),
+});
