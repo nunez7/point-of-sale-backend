@@ -11,6 +11,7 @@ import {
   getConfig,
   updateConfig,
 } from '../controllers/soporte.controller';
+import { listAuditLogs } from '../controllers/audit.controller';
 import {
   createTicketSchema,
   updateTicketStatusSchema,
@@ -20,6 +21,7 @@ import {
   rejectTicketSchema,
   ticketsQuerySchema,
   ticketConfigSchema,
+  auditLogsQuerySchema,
 } from '../schemas';
 import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
@@ -85,6 +87,14 @@ router.patch(
   requireRole(Role.ADMIN, Role.GERENTE),
   validate(ticketConfigSchema),
   updateConfig
+);
+
+// Registro de auditoría (solo ADMIN/GERENTE).
+router.get(
+  '/audit-logs',
+  requireRole(Role.ADMIN, Role.GERENTE),
+  validate(auditLogsQuerySchema, 'query'),
+  listAuditLogs
 );
 
 export default router;

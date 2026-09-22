@@ -812,3 +812,20 @@ export const ticketsQuerySchema = z.object({
 export const ticketConfigSchema = z.object({
   soporteUserId: z.string().min(1).nullable().optional(),
 });
+
+export const auditLogsQuerySchema = z.object({
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha inicial debe tener formato YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha final debe tener formato YYYY-MM-DD')
+    .optional(),
+  entity: z.string().max(50).optional(),
+  action: z.string().max(50).optional(),
+  userId: z.string().uuid().optional(),
+  search: z.string().max(120).optional(),
+  page: z.string().optional(),
+  pageSize: z.string().optional(),
+});
