@@ -479,10 +479,10 @@ export async function productsReport(storeId: string) {
       SUM(si.quantity)::bigint AS quantitySold,
       SUM(si."unitPrice" * si.quantity) AS revenue,
       SUM(si.profit) AS profit
-    FROM "SaleItem" si
-    JOIN "Sale" s ON s.id = si."saleId"
-    JOIN "Product" p ON p.id = si."productId"
-    LEFT JOIN "Category" c ON c.id = p."categoryId"
+    FROM "sale_item" si
+    JOIN "sale" s ON s.id = si."saleId"
+    JOIN "product" p ON p.id = si."productId"
+    LEFT JOIN "category" c ON c.id = p."categoryId"
     WHERE s."storeId" = ${storeId}
       AND s.status = 'COMPLETED'
       AND si."canceledAt" IS NULL
@@ -518,10 +518,10 @@ export async function profitMarginByCategory(storeId: string) {
       COALESCE(c.name, 'Sin categoría') AS category,
       SUM(si."unitPrice" * si.quantity) AS revenue,
       SUM(si.profit) AS profit
-    FROM "SaleItem" si
-    JOIN "Sale" s ON s.id = si."saleId"
-    JOIN "Product" p ON p.id = si."productId"
-    LEFT JOIN "Category" c ON c.id = p."categoryId"
+    FROM "sale_item" si
+    JOIN "sale" s ON s.id = si."saleId"
+    JOIN "product" p ON p.id = si."productId"
+    LEFT JOIN "category" c ON c.id = p."categoryId"
     WHERE s."storeId" = ${storeId}
       AND s.status = 'COMPLETED'
       AND si."canceledAt" IS NULL
@@ -557,8 +557,8 @@ export async function suppliersReport(storeId: string) {
       sup.name AS "supplierName",
       COUNT(*)::bigint AS "totalPurchases",
       SUM(st.total) AS "totalSpent"
-    FROM "SupplierTransaction" st
-    JOIN "Supplier" sup ON sup.id = st."supplierId"
+    FROM "supplier_transaction" st
+    JOIN "supplier" sup ON sup.id = st."supplierId"
     WHERE st."storeId" = ${storeId}
       AND st.status = 'COMPLETED'
     GROUP BY sup.id, sup.name
@@ -710,8 +710,8 @@ export async function cierreCaja(
           ) AS "motivoName",
           SUM(cm.monto) AS total,
           COUNT(*)::bigint AS cantidad
-        FROM "CajaMovimiento" cm
-        LEFT JOIN "CajaMovimientoMotivo" m ON m.id = cm."motivoId"
+        FROM "caja_movimiento" cm
+        LEFT JOIN "caja_movimiento_motivo" m ON m.id = cm."motivoId"
         WHERE cm."cajaSessionId" = ANY(${sessionIds}::text[])
           AND cm."storeId" = ${storeId}
         GROUP BY cm."cajaSessionId", cm.tipo, cm.metodo, cm."motivoId", cm."motivoTexto", m.name
