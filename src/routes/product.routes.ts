@@ -6,6 +6,8 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
+  uploadProductImage,
+  deleteProductImage,
   getInventory,
   getLowStock,
   getStockAlerts,
@@ -26,6 +28,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/role';
 import { Role } from '../../generated/prisma/client.js';
 import { uploadSingle } from '../config/multer';
+import { uploadImageSingle } from '../config/multer.images';
 
 const router = Router();
 
@@ -70,6 +73,23 @@ router.delete(
   requireRole(Role.ADMIN),
   validate(idParamSchema, 'params'),
   deleteProduct
+);
+
+// ---------- Imagen de producto ----------
+router.post(
+  '/:id/image',
+  requireAuth,
+  requireRole(Role.ADMIN, Role.GERENTE),
+  validate(idParamSchema, 'params'),
+  uploadImageSingle('image'),
+  uploadProductImage
+);
+router.delete(
+  '/:id/image',
+  requireAuth,
+  requireRole(Role.ADMIN, Role.GERENTE),
+  validate(idParamSchema, 'params'),
+  deleteProductImage
 );
 
 router.post(

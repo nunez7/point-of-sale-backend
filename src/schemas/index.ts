@@ -43,6 +43,7 @@ export const productSchema = z.object({
     .max(50, 'Máximo 50 caracteres')
     .optional()
     .nullable(),
+  imageUrl: z.string().url('URL de imagen inválida').optional().nullable(),
   unidadVenta: z.nativeEnum(UnidadVenta).default(UnidadVenta.UNIDAD),
   categoryId: z.string().optional().nullable(),
   storeId: z.string().min(1),

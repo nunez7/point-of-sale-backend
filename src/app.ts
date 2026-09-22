@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import path from 'path';
 import { env } from './config/env';
 import { errorHandler, notFound } from './middleware/error';
 import authRoutes from './routes/auth.routes';
@@ -33,6 +34,9 @@ app.use(
 );
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Archivos estáticos (imágenes de productos)
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 if (env.NODE_ENV === 'development') {
   app.use(morgan('dev'));

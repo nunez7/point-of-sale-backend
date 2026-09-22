@@ -148,6 +148,7 @@ export interface CreateProductInput {
   sku?: string | null;
   description?: string | null;
   presentacion?: string | null;
+  imageUrl?: string | null;
   unidadVenta?: UnidadVenta;
   categoryId?: string | null;
   storeId: string;
@@ -169,6 +170,7 @@ export async function createProduct(data: CreateProductInput, userId: string) {
           sku: sku ?? (await generarSkuAutomatico(tx)),
           description: data.description ?? undefined,
           presentacion: data.presentacion?.trim() ? data.presentacion.trim() : undefined,
+          imageUrl: data.imageUrl ?? undefined,
           unidadVenta: data.unidadVenta ?? 'UNIDAD',
           categoryId: data.categoryId ?? undefined,
           storeId: data.storeId,
@@ -233,6 +235,7 @@ export async function updateProduct(
           ...(data.presentacion !== undefined && {
             presentacion: data.presentacion?.trim() ? data.presentacion.trim() : null,
           }),
+          ...(data.imageUrl !== undefined && { imageUrl: data.imageUrl ?? null }),
           ...(data.unidadVenta !== undefined && { unidadVenta: data.unidadVenta }),
           ...(data.categoryId !== undefined && { categoryId: data.categoryId ?? null }),
           ...(data.costPrice !== undefined && { costPrice: data.costPrice }),

@@ -282,6 +282,7 @@ model Product {
   sku          String?    @unique
   description  String?
   presentacion String?
+  imageUrl     String?
   unidadVenta  UnidadVenta @default(UNIDAD)
   categoryId   String?
   category     Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)

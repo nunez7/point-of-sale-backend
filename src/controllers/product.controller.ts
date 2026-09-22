@@ -1,4 +1,6 @@
 import { Response } from 'express';
+import fs from 'fs/promises';
+import path from 'path';
 import { asyncAuthHandler } from '../utils/asyncHandler';
 import * as productService from '../services/product.service';
 import * as inventoryService from '../services/inventory.service';
@@ -88,4 +90,50 @@ export const getLowStock = asyncAuthHandler(async (_req: AuthedRequest, res: Res
 export const getStockAlerts = asyncAuthHandler(async (_req: AuthedRequest, res: Response) => {
   const alerts = await fetchStockAlerts(_req.user!.storeId);
   res.json({ alerts });
+});
+
+// ---------- Imagen de producto ----------
+
+export const uploadProductImage = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const product = await productService.getProduct(req.params.id, req.user!.storeId);
+  if (!product) throw ApiError.notFound('Producto no encontrado', 'PRODUCT_NOT_FOUND');
+
+  if (!req.file) {
+    throw ApiError.badRequest('No se proporcionó ninguna imagen', 'NO_IMAGE_FILE');
+  }
+
+  // Construir URL relativa para servir vía express.static
+  const imageUrl = `/uploads/products/${req.file.filename}`;
+
+  // Si ya tenía una imagen, eliminar la anterior
+  if (product.imageUrl) {
+    const oldPath = path.join(process.cwd(), product.imageUrl);
+    await fs.unlink(oldPath).catch(() => {});
+  }
+
+  const updated = await productService.updateProduct(
+    req.params.id,
+    { imageUrl },
+    req.user!.id
+  );
+
+  res.json({ product: updated });
+});
+
+export const deleteProductImage = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
+  const product = await productService.getProduct(req.params.id, req.user!.storeId);
+  if (!product) throw ApiError.notFound('Producto no encontrado', 'PRODUCT_NOT_FOUND');
+
+  if (product.imageUrl) {
+    const filePath = path.join(process.cwd(), product.imageUrl);
+    await fs.unlink(filePath).catch(() => {});
+  }
+
+  const updated = await productService.updateProduct(
+    req.params.id,
+    { imageUrl: null },
+    req.user!.id
+  );
+
+  res.json({ product: updated });
 });
