@@ -240,6 +240,12 @@ npm run prisma:generate
 
 > **Prisma 7**: Nunca importar desde `@prisma/client`. Siempre usar `../../generated/prisma/client.js`.
 
+**Por qué pasa**: `generated/` está en `.gitignore`; el cliente solo existe después de generarlo. `npm install`, `npm run typecheck` y `npm run build` lo regeneran automáticamente si falta (`scripts/ensure-prisma-client.cjs`), también cuando el schema es más nuevo que el cliente.
+
+> Si ves **cientos** de errores tipo `Parameter 'x' implicitly has an 'any' type`, `Property 'y' does not exist on type '{}'`, `Type 'unknown' cannot be used as an index type` o `'err' is of type 'unknown'` en ~50 archivos, **no son bugs de código**: son la cascada del TS2307 (sin cliente, Prisma deja de tipar). Regenerar el cliente los elimina todos.
+
+> Nunca ejecutar `npx prisma generate` a secas: deja los `.ts` del cliente junto a los `.js`/`.d.ts` y falla con `TS6059: File ... is not under 'rootDir'`. Usar siempre `npm run prisma:generate` (o los hooks `npm run typecheck` / `npm run build`).
+
 ---
 
 ### Seed no ejecuta

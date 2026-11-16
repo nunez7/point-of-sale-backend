@@ -6,8 +6,11 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc -p tsconfig.json",
+    "prebuild": "node scripts/ensure-prisma-client.cjs",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
+    "pretypecheck": "node scripts/ensure-prisma-client.cjs",
+    "postinstall": "node scripts/ensure-prisma-client.cjs",
     "prisma:generate": "prisma generate && tsc -p tsconfig.generated.json && node scripts/clean-generated.cjs",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
