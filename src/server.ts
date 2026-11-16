@@ -90,7 +90,7 @@ async function iniciarServidorLocal(): Promise<void> {
         `🚀 API Punto-Venta corriendo en http://${env.HOST ?? 'localhost'}:${env.PORT}`,
       );
       logger.info(`   Health: http://${env.HOST ?? 'localhost'}:${env.PORT}/health`);
-      logger.info(`   IPs autorizadas: ${env.ALLOWED_IPS.join(', ') || 'todas (sin restricción)'}`);
+      logger.info(`   CORS permitido: ${env.CORS_ORIGIN}`);
     });
 
     const shutdown = async (signal: string) => {

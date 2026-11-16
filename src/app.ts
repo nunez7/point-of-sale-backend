@@ -5,7 +5,6 @@ import morgan from 'morgan';
 import path from 'path';
 import { env } from './config/env';
 import { errorHandler, notFound } from './middleware/error';
-import { ipAllowlist } from './middleware/ipAllowlist';
 import authRoutes from './routes/auth.routes';
 import productRoutes from './routes/product.routes';
 import categoryRoutes from './routes/category.routes';
@@ -26,16 +25,16 @@ import cotizacionRoutes from './routes/cotizacion.routes';
 
 export const app = express();
 
-// Sin TRUST_PROXY la IP se toma del socket; con proxy/túnel hay que indicar los saltos
-// de confianza para que req.ip sea la IP real del cliente y no la del proxy.
-app.set('trust proxy', env.TRUST_PROXY > 0 ? env.TRUST_PROXY : false);
+// Se confía en exactamente un proxy delante de la app (Vercel, Render, Nginx, ngrok...).
+// Sin esto, req.ip sería la IP del proxy y express-rate-limit lanzaría
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR (500) al ver la cabecera x-forwarded-for.
+// En local, sin proxy, la cabecera no llega y req.ip sigue siendo la IP del socket.
+app.set('trust proxy', 1);
 
 // crossOriginResourcePolicy: el frontend vive en otro origen y las imágenes de
 // /uploads se cargan con <img> (sin CORS); con el valor por defecto ('same-origin')
 // el navegador las bloquea.
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-// Restricción por IP antes de CORS: una IP no autorizada no obtiene ni cabeceras CORS.
-app.use(ipAllowlist);
 app.use(
   cors({
     origin:

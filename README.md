@@ -68,7 +68,6 @@ DATABASE_URL="postgresql://user:password@localhost:5432/punto-venta?schema=publi
 JWT_SECRET="clave-secreta-larga-y-aleatoria"
 JWT_EXPIRES_IN=8h
 CORS_ORIGIN="*"
-SOCKET_CORS_ORIGIN="*"
 DB_POOL_MAX=10
 DB_POOL_IDLE_TIMEOUT=30000
 ```
