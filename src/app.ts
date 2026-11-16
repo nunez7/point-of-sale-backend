@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import path from 'path';
 import { env } from './config/env';
 import { errorHandler, notFound } from './middleware/error';
+import { ipAllowlist } from './middleware/ipAllowlist';
 import authRoutes from './routes/auth.routes';
 import productRoutes from './routes/product.routes';
 import categoryRoutes from './routes/category.routes';
@@ -25,11 +26,21 @@ import cotizacionRoutes from './routes/cotizacion.routes';
 
 export const app = express();
 
+// Sin TRUST_PROXY la IP se toma del socket; con proxy/túnel hay que indicar los saltos
+// de confianza para que req.ip sea la IP real del cliente y no la del proxy.
+app.set('trust proxy', env.TRUST_PROXY > 0 ? env.TRUST_PROXY : false);
+
 app.use(helmet());
+// Restricción por IP antes de CORS: una IP no autorizada no obtiene ni cabeceras CORS.
+app.use(ipAllowlist);
 app.use(
   cors({
     origin:
-      env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN.split(','),
+      env.CORS_ORIGIN === '*'
+        ? true
+        : env.CORS_ORIGIN.split(',')
+            .map((origin) => origin.trim())
+            .filter(Boolean),
     credentials: true,
   })
 );

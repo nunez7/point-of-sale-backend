@@ -16,9 +16,14 @@ async function start(): Promise<void> {
     const server = http.createServer(app);
     initSocket(server);
 
-    server.listen(env.PORT, () => {
-      logger.info(`🚀 API Punto-Venta corriendo en http://localhost:${env.PORT}`);
-      logger.info(`   Health: http://localhost:${env.PORT}/health`);
+    const listenOptions = env.HOST ? { port: env.PORT, host: env.HOST } : { port: env.PORT };
+
+    server.listen(listenOptions, () => {
+      logger.info(
+        `🚀 API Punto-Venta corriendo en http://${env.HOST ?? 'localhost'}:${env.PORT}`,
+      );
+      logger.info(`   Health: http://${env.HOST ?? 'localhost'}:${env.PORT}/health`);
+      logger.info(`   IPs autorizadas: ${env.ALLOWED_IPS.join(', ') || 'todas (sin restricción)'}`);
     });
 
     const shutdown = async (signal: string) => {

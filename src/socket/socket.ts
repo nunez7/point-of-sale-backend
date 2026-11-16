@@ -5,6 +5,7 @@ import { env } from '../config/env';
 import { prisma } from '../config/prisma';
 import { sha256 } from '../utils/tokenHash';
 import { logger } from '../config/logger';
+import { isIpAllowed } from '../middleware/ipAllowlist';
 import { AuthedUser, JwtPayload } from '../types';
 
 const storeChannels = new Map<string, Set<string>>();
@@ -52,8 +53,23 @@ async function authenticateSocket(socket: Socket): Promise<AuthedUser | null> {
 export function initSocket(server: HttpServer): Server {
   io = new Server(server, {
     cors: {
-      origin: env.SOCKET_CORS_ORIGIN === '*' ? '*' : env.SOCKET_CORS_ORIGIN.split(','),
+      origin:
+        env.SOCKET_CORS_ORIGIN === '*'
+          ? '*'
+          : env.SOCKET_CORS_ORIGIN.split(',')
+              .map((origin) => origin.trim())
+              .filter(Boolean),
       methods: ['GET', 'POST'],
+    },
+    // CORS solo lo respeta el navegador: el filtro por IP se aplica aquí, en el
+    // handshake, para rechazar también clientes que no son navegador.
+    allowRequest: (req, callback) => {
+      const ip = req.socket.remoteAddress;
+      const allowed = isIpAllowed(ip);
+      if (!allowed) {
+        logger.warn(`Socket rechazado por IP no autorizada: ${ip ?? 'desconocida'}`);
+      }
+      callback(null, allowed);
     },
   });
 
