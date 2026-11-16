@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import { prisma } from '../config/prisma';
 import { autoCloseStoreSessions, buildCronExpression } from './autoClose.service';
 import { logger } from '../config/logger';
@@ -6,7 +6,7 @@ import { env } from '../config/env';
 
 interface ScheduledJob {
   storeId: string;
-  task: cron.ScheduledTask;
+  task: ScheduledTask;
 }
 
 const jobs = new Map<string, ScheduledJob>();

@@ -44,4 +44,5 @@ Express + TypeScript + Prisma + PostgreSQL + Socket.io POS multi-store backend. 
 - All API messages/errors/logs in Spanish. Keep enum values (`Role`, `PaymentMethod`) as English uppercase constants.
 - Writes that affect business state also create an `AuditLog` row (action, entity, entityId, metadata).
 - Seed credentials: `admin@servicaja.com` / `admin123`, store `STORE001`.
-- Dependencies: express 4.19, prisma 7.10, typescript 5.5, zod 3.23, socket.io 4.7, bcryptjs, cors, helmet, morgan, winston, jsonwebtoken, @prisma/adapter-pg, pg.
+- Dependencies: express 4.22, prisma 7.10.1, typescript 5.5, zod 4.6, socket.io 4.8, node-cron 4.6, uuid 11, bcryptjs, cors, helmet, morgan, winston, jsonwebtoken, @prisma/adapter-pg, pg.
+- **Dependencias con pin/override**: `overrides.qs` fuerza `qs ^6.17.1` porque express 4.x fija `~6.15.1`/`~6.16.0` y esas versiones siguen vulnerables (DoS en `qs.parse`); no quitar el override ni "arreglarlo" bajando express. `node-cron` v4 trae sus propios tipos (`ScheduledTask` es export nombrado, ya no `cron.ScheduledTask`) y ya no depende de `uuid`: `uuid@11` se declara como dependencia directa por `src/config/multer.images.ts`. `xlsx@0.18.5` no tiene parche en npm (SheetJS abandonó el registry); alternativa evaluada: migrar a `exceljs` o instalar el tarball oficial del CDN de SheetJS.
