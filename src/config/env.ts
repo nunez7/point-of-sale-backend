@@ -13,7 +13,7 @@ const envSchema = z
     // Número de saltos de proxy de confianza para resolver req.ip (0 = sin proxy).
     TRUST_PROXY: z.coerce.number().int().min(0).default(0),
     // Lista de IPs autorizadas (separadas por coma). Admite comodín de sufijo: '192.168.1.*'.
-    // Vacía = sin restricción por IP (no permitido en producción).
+    // Vacía = sin restricción por IP (no permitido en producción con la restricción activa).
     ALLOWED_IPS: z
       .string()
       .default('127.0.0.1,::1')
@@ -23,6 +23,14 @@ const envSchema = z
           .map((ip) => ip.trim())
           .filter(Boolean),
       ),
+    // Interruptor de la restricción por IP. En hostings serverless (Vercel, etc.) la IP
+    // de origen cambia en cada petición, así que no se puede mantener una allowlist:
+    // con 'false' el middleware y el handshake de Socket.io dejan pasar todo.
+    // Se parsea explícitamente porque z.coerce.boolean() convierte 'false' en true.
+    IP_ALLOWLIST_ENABLED: z
+      .enum(['true', 'false', '1', '0'])
+      .default('true')
+      .transform((value) => value === 'true' || value === '1'),
     DATABASE_URL: z.string().min(1),
     JWT_SECRET: z.string().min(32, 'JWT_SECRET debe tener al menos 32 caracteres'),
     JWT_EXPIRES_IN: z.string().default('8h'),
@@ -48,16 +56,19 @@ const envSchema = z
   )
   .refine(
     (data) => {
+      if (!data.IP_ALLOWLIST_ENABLED) return true;
       if (data.NODE_ENV === 'production' && data.ALLOWED_IPS.length === 0) return false;
       return true;
     },
     {
-      message: 'ALLOWED_IPS no puede estar vacío en producción',
+      message:
+        'ALLOWED_IPS no puede estar vacío en producción (usa IP_ALLOWLIST_ENABLED=false si el hosting no permite allowlist)',
       path: ['ALLOWED_IPS'],
     },
   )
   .refine(
     (data) => {
+      if (!data.IP_ALLOWLIST_ENABLED) return true;
       if (data.NODE_ENV === 'production' && data.ALLOWED_IPS.includes('*')) return false;
       return true;
     },

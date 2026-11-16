@@ -28,8 +28,11 @@ function matches(allowed: string, ip: string): boolean {
 /**
  * Indica si una IP está autorizada según ALLOWED_IPS.
  * Lista vacía = control desactivado (se rechaza en producción desde env.ts).
+ * IP_ALLOWLIST_ENABLED=false desactiva el control por completo (hostings donde la IP
+ * de origen es dinámica, p. ej. Vercel).
  */
 export function isIpAllowed(raw?: string | null): boolean {
+  if (!env.IP_ALLOWLIST_ENABLED) return true;
   if (env.ALLOWED_IPS.length === 0) return true;
   const ip = normalizeIp(raw);
   if (!ip) return false;

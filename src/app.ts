@@ -30,7 +30,10 @@ export const app = express();
 // de confianza para que req.ip sea la IP real del cliente y no la del proxy.
 app.set('trust proxy', env.TRUST_PROXY > 0 ? env.TRUST_PROXY : false);
 
-app.use(helmet());
+// crossOriginResourcePolicy: el frontend vive en otro origen y las imágenes de
+// /uploads se cargan con <img> (sin CORS); con el valor por defecto ('same-origin')
+// el navegador las bloquea.
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 // Restricción por IP antes de CORS: una IP no autorizada no obtiene ni cabeceras CORS.
 app.use(ipAllowlist);
 app.use(
