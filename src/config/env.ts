@@ -78,9 +78,20 @@ const envSchema = z
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
+  // Se lanza un Error (en lugar de process.exit) para que el mensaje llegue íntegro a los
+  // logs; en un runtime serverless process.exit solo produce FUNCTION_INVOCATION_FAILED y
+  // se pierde el detalle de qué variable falta o es inválida.
+  const detalles = Object.entries(parsed.error.flatten().fieldErrors)
+    .map(([campo, mensajes]) => `  - ${campo}: ${(mensajes ?? []).join('; ')}`)
+    .join('\n');
+
+  const mensaje =
+    `Variables de entorno inválidas:\n${detalles}\n` +
+    'Revisa el archivo .env (desarrollo) o las Environment Variables del hosting (producción).';
+
   // eslint-disable-next-line no-console
-  console.error('❌ Invalid environment variables:', parsed.error.flatten().fieldErrors);
-  process.exit(1);
+  console.error(`❌ ${mensaje}`);
+  throw new Error(mensaje);
 }
 
 export const env = parsed.data;
