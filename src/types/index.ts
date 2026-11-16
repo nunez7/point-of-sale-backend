@@ -31,12 +31,24 @@ export interface SaleItemInput {
   unitPrice: number;
 }
 
+export interface SupplierTxLotInput {
+  quantity: number;
+  // Fecha de caducidad del lote (YYYY-MM-DD). null = sin caducidad.
+  expirationDate?: string | null;
+  lotCode?: string | null;
+  // Costo unitario propio del lote; si se omite se usa el costo de la línea.
+  unitCost?: number;
+}
+
 export interface SupplierTxItemInput {
   productId: string;
   quantity: number;
   unitCost: number;
   marginPct?: number;
   sellingPrice?: number;
+  // Desglose en lotes. Si se omite, la cantidad completa entra como un solo
+  // lote sin caducidad. Si se envía, la suma debe igualar `quantity`.
+  lots?: SupplierTxLotInput[];
 }
 
 export const ROLE_HIERARCHY: Record<Role, number> = {

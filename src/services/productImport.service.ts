@@ -3,6 +3,7 @@ import { Prisma, UnidadVenta } from '../../generated/prisma/client.js';
 import { prisma } from '../config/prisma';
 import { ApiError } from '../utils/ApiError';
 import { generarSkuAutomatico } from './product.service';
+import { ajustarLotesAInventario } from './lot.service';
 
 const PRODUCT_TEMPLATE_COLUMNS = [
   { key: 'name' },
@@ -336,6 +337,16 @@ export async function importProductsFromExcel(
             update: { quantity: input.initialStock, lowStockThreshold: input.lowStockThreshold },
           });
 
+          // El stock que fija la importación debe quedar respaldado por lotes.
+          await ajustarLotesAInventario(
+            tx,
+            storeId,
+            existingProduct.id,
+            input.initialStock ?? 0,
+            input.costPrice,
+            input.expirationDate
+          );
+
           await tx.auditLog.create({
             data: {
               storeId,
@@ -379,6 +390,16 @@ export async function importProductsFromExcel(
             create: { storeId, productId: product.id, quantity: input.initialStock, lowStockThreshold: input.lowStockThreshold },
             update: { quantity: input.initialStock, lowStockThreshold: input.lowStockThreshold },
           });
+
+          // El stock inicial nace como un lote con la caducidad capturada.
+          await ajustarLotesAInventario(
+            tx,
+            storeId,
+            product.id,
+            input.initialStock ?? 0,
+            input.costPrice,
+            input.expirationDate
+          );
 
           await tx.auditLog.create({
             data: {

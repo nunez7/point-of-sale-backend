@@ -29,9 +29,15 @@ export async function getInventoryByStore(storeId: string, filters: InventoryFil
             ? [{ lowStockThreshold: filters.sortOrder ?? 'asc' }]
             : [{ quantity: filters.sortOrder ?? 'asc' }];
 
-  const mapRow = (inv: Prisma.InventoryGetPayload<{ include: { product: { include: { category: true } } } }>) => ({
+  const mapRow = (
+    inv: Prisma.InventoryGetPayload<{ include: { product: { include: { category: true } } } }>,
+    lotes?: { nextExpirationDate: string | null; lotsCount: number }
+  ) => ({
     ...inv,
     quantity: Number(inv.quantity),
+    // Próxima caducidad entre los lotes con saldo (para la columna "Vence").
+    nextExpirationDate: lotes?.nextExpirationDate ?? null,
+    lotsCount: lotes?.lotsCount ?? 0,
   });
 
   // Sin `page` se devuelve el listado completo (compatibilidad).
@@ -41,7 +47,11 @@ export async function getInventoryByStore(storeId: string, filters: InventoryFil
       include: { product: { include: { category: true } } },
       orderBy,
     });
-    return { inventory: inventories.map(mapRow) };
+    const caducidades = await mapaCaducidades(
+      storeId,
+      inventories.map((i) => i.productId)
+    );
+    return { inventory: inventories.map((inv) => mapRow(inv, caducidades.get(inv.productId))) };
   }
 
   const limit = filters.limit ?? 50;
@@ -56,13 +66,47 @@ export async function getInventoryByStore(storeId: string, filters: InventoryFil
     prisma.inventory.count({ where }),
   ]);
 
+  const caducidades = await mapaCaducidades(
+    storeId,
+    inventories.map((i) => i.productId)
+  );
+
   return {
-    inventory: inventories.map(mapRow),
+    inventory: inventories.map((inv) => mapRow(inv, caducidades.get(inv.productId))),
     total,
     page: filters.page,
     limit,
     totalPages: Math.max(1, Math.ceil(total / limit)),
   };
+}
+
+// Próxima caducidad y número de lotes con saldo por producto (una sola query
+// para toda la página del inventario).
+async function mapaCaducidades(storeId: string, productIds: string[]) {
+  const mapa = new Map<string, { nextExpirationDate: string | null; lotsCount: number }>();
+  if (productIds.length === 0) return mapa;
+
+  const lotes = await prisma.inventoryLot.groupBy({
+    by: ['productId'],
+    where: {
+      storeId,
+      productId: { in: productIds },
+      availableQty: { gt: 0 },
+      expirationDate: { not: null },
+    },
+    _min: { expirationDate: true },
+    _count: { _all: true },
+  });
+
+  for (const lote of lotes) {
+    mapa.set(lote.productId, {
+      nextExpirationDate: lote._min.expirationDate
+        ? lote._min.expirationDate.toISOString().slice(0, 10)
+        : null,
+      lotsCount: lote._count._all,
+    });
+  }
+  return mapa;
 }
 
 export async function getLowStock(storeId: string) {

@@ -28,6 +28,7 @@ import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/role';
 import { Role } from '../../generated/prisma/client.js';
+import { listLots, getExpiringLots, getLotsBalance } from '../controllers/lot.controller';
 
 const router = Router();
 
@@ -60,6 +61,12 @@ router.delete(
   validate(idParamSchema, 'params'),
   deleteReason
 );
+
+// ---------- Lotes y caducidades ----------
+// Las rutas estáticas van antes de cualquier `/:id`.
+router.get('/lots/por-vencer', requireAuth, getExpiringLots);
+router.get('/lots/cuadre', requireAuth, requireRole(Role.ADMIN, Role.GERENTE), getLotsBalance);
+router.get('/lots', requireAuth, listLots);
 
 // ---------- Movimientos de inventario ----------
 router.get(

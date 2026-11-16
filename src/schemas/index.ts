@@ -144,22 +144,60 @@ export const supplierSchema = z.object({
 
 export const supplierUpdateSchema = supplierSchema.partial();
 
-export const supplierTxItemSchema = z.object({
-  productId: z.string().min(1),
+// Lote que ingresa con una línea de compra. La fecha de caducidad es opcional
+// (null = producto sin caducidad, se consume al final en la rotación FEFO).
+export const supplierTxLotSchema = z.object({
   quantity: cantidadPositiva,
-  unitCost: positiveDecimal,
-  // Margen de ganancia (%) sobre el costo para sugerir el precio de venta.
-  // Por defecto 16 si no se envía.
-  marginPct: z.number().min(0).max(1000).optional(),
-  // Precio de venta resultante. Si se omite, se calcula como
-  // unitCost * (1 + marginPct/100).
-  sellingPrice: positiveDecimal.optional(),
+  expirationDate: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha de caducidad debe tener formato YYYY-MM-DD')
+    .nullable()
+    .optional(),
+  lotCode: z
+    .string()
+    .trim()
+    .max(60, 'Máximo 60 caracteres')
+    .nullable()
+    .optional(),
+  // Costo unitario propio del lote; si se omite se usa el de la línea.
+  unitCost: positiveDecimal.optional(),
 });
+
+export const supplierTxItemSchema = z
+  .object({
+    productId: z.string().min(1),
+    quantity: cantidadPositiva,
+    unitCost: positiveDecimal,
+    // Margen de ganancia (%) sobre el costo para sugerir el precio de venta.
+    // Por defecto 16 si no se envía.
+    marginPct: z.number().min(0).max(1000).optional(),
+    // Precio de venta resultante. Si se omite, se calcula como
+    // unitCost * (1 + marginPct/100).
+    sellingPrice: positiveDecimal.optional(),
+    // Desglose en lotes con caducidad propia. Si se omite, la cantidad
+    // completa entra como un solo lote sin caducidad.
+    lots: z.array(supplierTxLotSchema).min(1).optional(),
+  })
+  .refine(
+    (item) => {
+      if (!item.lots || item.lots.length === 0) return true;
+      const suma = item.lots.reduce((acc, lote) => acc + lote.quantity, 0);
+      return Math.abs(suma - item.quantity) < 0.0005;
+    },
+    {
+      message: 'La suma de los lotes debe ser igual a la cantidad de la línea',
+      path: ['lots'],
+    }
+  );
 
 export const supplierTxSchema = z.object({
   supplierId: z.string().min(1),
   items: z.array(supplierTxItemSchema).min(1),
   paymentMethod: paymentMethodSchema,
+  // Origen del pago: CAJA descuenta del corte, DUENO no lo afecta.
+  paidFrom: z.enum(['CAJA', 'DUENO']).optional(),
+  cajaSessionId: z.string().min(1).nullable().optional(),
 });
 
 export const createUserSchema = z.object({

@@ -2,6 +2,7 @@ import { prisma } from '../config/prisma';
 import { MovementTipo, Prisma } from '../../generated/prisma/client.js';
 import { ApiError } from '../utils/ApiError';
 import { mexicoStartOfDay, mexicoEndOfDay } from '../utils/dates';
+import { consumirLotesDeProducto, crearLote, retirarLotesDeCompra } from './lot.service';
 
 export interface CreateMovementInput {
   storeId: string;
@@ -12,6 +13,10 @@ export interface CreateMovementInput {
   comment?: string | null;
   referenceType?: string | null;
   referenceId?: string | null;
+  // Solo para ENTRADAS: si se captura fecha de caducidad se crea un lote con
+  // ella; si no, el lote queda como "sin caducidad" (se consume al final).
+  expirationDate?: string | null;
+  lotCode?: string | null;
 }
 
 function startOfDay(dateStr?: string): Date {
@@ -22,14 +27,26 @@ function endOfDay(dateStr?: string): Date {
   return mexicoEndOfDay(dateStr);
 }
 
-// Aplica el delta de stock al inventario de forma atómica y devuelve
-// el saldo antes/después. Lanza INSUFFICIENT_STOCK si una SALIDA deja negativo.
+// Aplica el delta de stock al inventario de forma atómica (total + lotes) y
+// devuelve el saldo antes/después. Lanza INSUFFICIENT_STOCK si una SALIDA deja
+// negativo. Las SALIDAS consumen los lotes que caducan primero (FEFO), salvo
+// que se indique `compraItemId`, en cuyo caso se retiran de esa compra.
 async function applyInventoryDelta(
   tx: Prisma.TransactionClient,
   storeId: string,
   productId: string,
   tipo: MovementTipo,
-  quantity: Prisma.Decimal
+  quantity: Prisma.Decimal,
+  opciones?: {
+    // ENTRADA: caducidad y folio del lote que ingresa.
+    expirationDate?: string | null;
+    lotCode?: string | null;
+    // SALIDA: retirar los lotes originados por esta línea de compra.
+    compraItemId?: string;
+    // ENTRADA: el llamador ya creó los lotes (compras con varios lotes por
+    // línea); solo se refleja el total en Inventory.
+    sinLote?: boolean;
+  }
 ): Promise<{ before: Prisma.Decimal; after: Prisma.Decimal }> {
   const existing = await tx.inventory.findUnique({
     where: { storeId_productId: { storeId, productId } },
@@ -43,6 +60,30 @@ async function applyInventoryDelta(
         'INSUFFICIENT_STOCK'
       );
     }
+
+    if (opciones?.compraItemId) {
+      // Compras anteriores a la migración no tienen lotes vinculados: en ese
+      // caso se descarga por FEFO para no bloquear la cancelación.
+      const lotesVinculados = await tx.inventoryLot.count({
+        where: { supplierTransactionItemId: opciones.compraItemId },
+      });
+      if (lotesVinculados === 0) {
+        await consumirLotesDeProducto(tx, storeId, productId, quantity);
+      } else {
+        const residuo = await retirarLotesDeCompra(tx, opciones.compraItemId, quantity);
+        if (residuo.gt(0)) {
+          throw ApiError.badRequest(
+            `No se puede cancelar la compra: ${Number(residuo)} unidad(es) de ese lote ya se vendieron o ajustaron`,
+            'LOTE_YA_CONSUMIDO'
+          );
+        }
+      }
+    } else {
+      // Descarga los lotes que vencen primero. Si los lotes no alcanzan,
+      // planearConsumoFEFO lanza INSUFFICIENT_STOCK y revierte la transacción.
+      await consumirLotesDeProducto(tx, storeId, productId, quantity);
+    }
+
     const updated = await tx.inventory.update({
       where: { storeId_productId: { storeId, productId } },
       data: { quantity: { decrement: quantity } },
@@ -50,7 +91,23 @@ async function applyInventoryDelta(
     return { before, after: updated.quantity };
   }
 
-  // ENTRADA
+  // ENTRADA: normalmente nace un lote para que el total tenga respaldo. En
+  // compras con varios lotes por línea el llamador ya los creó (`sinLote`).
+  if (!opciones?.sinLote) {
+    const producto = await tx.product.findUnique({
+      where: { id: productId },
+      select: { costPrice: true },
+    });
+    await crearLote(tx, {
+      storeId,
+      productId,
+      quantity,
+      unitCost: producto?.costPrice ?? new Prisma.Decimal(0),
+      expirationDate: opciones?.expirationDate ?? null,
+      lotCode: opciones?.lotCode ?? null,
+    });
+  }
+
   if (existing) {
     const updated = await tx.inventory.update({
       where: { storeId_productId: { storeId, productId } },
@@ -145,7 +202,8 @@ export async function createMovement(input: CreateMovementInput) {
       input.storeId,
       input.productId,
       reason.tipo,
-      quantity
+      quantity,
+      { expirationDate: input.expirationDate ?? null, lotCode: input.lotCode ?? null }
     );
 
     const movement = await tx.stockMovement.create({
@@ -196,6 +254,9 @@ export interface BatchMovementItem {
   productId: string;
   quantity: Prisma.Decimal | number;
   comment?: string | null;
+  // Solo ENTRADAS: caducidad del lote que ingresa.
+  expirationDate?: string | null;
+  lotCode?: string | null;
 }
 
 export interface CreateMovementBatchInput {
@@ -252,7 +313,8 @@ export async function createMovementBatch(input: CreateMovementBatchInput) {
         input.storeId,
         item.productId,
         reason.tipo,
-        quantity
+        quantity,
+        { expirationDate: item.expirationDate ?? null, lotCode: item.lotCode ?? null }
       );
 
       const lossValue =
@@ -488,7 +550,10 @@ export async function createPurchaseMovementsInTx(
       input.storeId,
       item.productId,
       MovementTipo.ENTRADA,
-      quantity
+      quantity,
+      // Los lotes de la compra los crea `supplier.service` (una línea puede
+      // traer varios lotes con fechas distintas).
+      { sinLote: true }
     );
 
     const movement = await tx.stockMovement.create({
@@ -543,7 +608,13 @@ export async function createSupplierCancelMovementsInTx(
     storeId: string;
     userId: string;
     referenceId: string;
-    items: { productId: string; quantity: Prisma.Decimal | number; unitCost: Prisma.Decimal | number }[];
+    items: {
+      productId: string;
+      quantity: Prisma.Decimal | number;
+      unitCost: Prisma.Decimal | number;
+      // Línea de la compra: sus lotes son los que se retiran del inventario.
+      supplierTransactionItemId?: string | null;
+    }[];
   }
 ) {
   const reason = await tx.movementReason.findFirst({
@@ -572,7 +643,12 @@ export async function createSupplierCancelMovementsInTx(
       input.storeId,
       item.productId,
       MovementTipo.SALIDA,
-      quantity
+      quantity,
+      // Si se conoce la línea de compra, los lotes se retiran de ahí y no por
+      // FEFO: así se deshace exactamente lo que entró.
+      item.supplierTransactionItemId
+        ? { compraItemId: item.supplierTransactionItemId }
+        : undefined
     );
 
     const movement = await tx.stockMovement.create({

@@ -204,6 +204,7 @@ model Store {
   tickets         Ticket[]
   ticketConfigs   TicketConfig[]
   cotizaciones    Cotizacion[]
+  inventoryLots   InventoryLot[]
 
   @@map("store")
 }
@@ -316,6 +317,7 @@ model Product {
   stockMovements       StockMovement[]
   promotionItems       PromotionItem[]
   promotionApplications PromotionApplication[]
+  inventoryLots        InventoryLot[]
 
   @@index([storeId])
   @@index([categoryId])
@@ -337,6 +339,65 @@ model Inventory {
   @@index([productId])
 
   @@map("inventory")
+}
+
+// Lote físico de mercancía: cada entrada de inventario con su propia fecha de
+// caducidad y costo. Regla de oro: `Inventory.quantity` debe ser siempre igual
+// a la suma de `availableQty` de los lotes con status ACTIVE de ese producto.
+// Esa sincronía la mantiene `services/lot.service.ts` dentro de la misma
+// transacción en la que se toca el inventario.
+model InventoryLot {
+  id        String     @id @default(uuid())
+  storeId   String
+  store     Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // Folio del lote impreso por el proveedor (opcional).
+  lotCode   String?
+  // null = producto sin caducidad (abarrotes, limpieza, etc.). Al vender, los
+  // lotes sin caducidad se consumen al final (FEFO).
+  expirationDate DateTime?
+  // Cantidad que ingresó con este lote (histórico, no cambia).
+  receivedQty  Decimal @db.Decimal(12, 3)
+  // Saldo disponible del lote (lo que resta por vender).
+  availableQty Decimal @db.Decimal(12, 3)
+  // Costo unitario propio del lote: base del costo real de la venta.
+  unitCost  Decimal @db.Decimal(12, 2)
+  // Trazabilidad: compra a proveedor que originó el lote.
+  supplierTransactionItemId String?
+  supplierTransactionItem   SupplierTransactionItem? @relation(fields: [supplierTransactionItemId], references: [id], onDelete: SetNull)
+  // ACTIVE (con saldo) | DEPLETED (agotado) | EXPIRED (caducado) | DISCARDED (merma)
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  saleItems SaleItemLot[]
+
+  @@index([storeId, productId, expirationDate])
+  @@index([storeId, expirationDate, status])
+  @@index([supplierTransactionItemId])
+
+  @@map("inventory_lot")
+}
+
+// Detalle de qué lote surtió cada línea de venta. Permite devolver el
+// inventario al lote exacto al cancelar y calcular el costo real (margen).
+model SaleItemLot {
+  id         String       @id @default(uuid())
+  saleItemId String
+  saleItem   SaleItem     @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
+  lotId      String
+  lot        InventoryLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  // Cantidad que este lote surtió a la línea de venta.
+  quantity   Decimal      @db.Decimal(12, 3)
+  // Cantidad ya devuelta al lote por cancelaciones o devoluciones parciales.
+  restoredQty Decimal     @db.Decimal(12, 3) @default(0)
+  unitCost   Decimal      @db.Decimal(12, 2)
+
+  @@unique([saleItemId, lotId])
+  @@index([lotId])
+
+  @@map("sale_item_lot")
 }
 
 // Motivo editable de un movimiento de inventario (merma, caducado, robo, reabasto, etc.).
@@ -493,6 +554,8 @@ model SaleItem {
   cancellationId   String?
   cancellation     Cancellation? @relation(fields: [cancellationId], references: [id])
 
+  lotAssignments SaleItemLot[]
+
   @@index([saleId])
   @@index([productId])
 
@@ -621,6 +684,10 @@ model SupplierTransactionItem {
   marginPct   Decimal              @db.Decimal(5, 2) @default(16)
   // Precio de venta resultante (sugerido o sobrescrito por el usuario).
   sellingPrice Decimal?            @db.Decimal(12, 2)
+
+  // Lotes físicos que ingresaron con esta línea de compra (cada uno con su
+  // fecha de caducidad y su costo).
+  lots        InventoryLot[]
 
   @@index([transactionId])
   @@index([productId])

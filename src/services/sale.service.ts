@@ -5,6 +5,14 @@ import { SaleItemInput } from '../types';
 import { mexicoStartOfDay, mexicoEndOfDay } from '../utils/dates';
 import { resolvePromotionsForSale, applyPromotionResolutionToSaleTx, revertPromotionApplicationsForSale } from './promotion.service';
 import { resolveCajaSession } from './cajaSession.service';
+import {
+  aplicarConsumo,
+  costoPromedioPonderado,
+  planearConsumoFEFO,
+  restaurarDeAsignaciones,
+  restaurarLoteGenerico,
+  type AsignacionLote,
+} from './lot.service';
 
 export interface CreateSaleInput {
   storeId: string;
@@ -58,7 +66,8 @@ async function generateSaleNumber(tx: Tx, storeId: string, code: string): Promis
 
 // ── Batch inventory helpers ───────────────────────────────────────────
 // Valida stock de todos los items en una sola query y retorna el mapa de
-// disponibles. Lanza INSUFFICIENT_STOCK si alguno no cumple.
+// disponibles. Lanza INSUFFICIENT_STOCK si alguno no cumple. Se usa solo para
+// pedidos (PENDING), que no reservan ni consumen lotes todavía.
 async function validateStockBatch(
   tx: Tx,
   storeId: string,
@@ -102,13 +111,23 @@ async function decrementStockBatch(
 }
 
 // Restaura inventario (cancelación). Usa updateMany con `in` para reducir
-// round-trips: si el registro existe lo incrementa; si no, Prisma crea
-// la fila con el valor inicial. Como updateMany no soporta "upsert",
-// se usa upsert individual pero se ejecuta en un solo round-trip por batch.
+// round-trips y devuelve la mercancía a los lotes de los que salió: así una
+// devolución no "rejuvenece" un lote viejo ni pierde su caducidad.
 async function restoreStockBatch(
   tx: Tx,
   storeId: string,
-  items: { productId: string; quantity: Prisma.Decimal }[]
+  items: {
+    productId: string;
+    quantity: Prisma.Decimal;
+    // Lotes de los que salió esta línea (SaleItemLot). Vacío en ventas
+    // anteriores a la migración de lotes.
+    asignaciones?: {
+      id: string;
+      lotId: string;
+      quantity: Prisma.Decimal;
+      restoredQty: Prisma.Decimal;
+    }[];
+  }[]
 ): Promise<void> {
   const productIds = items.map((i) => i.productId);
   const existing = await tx.inventory.findMany({
@@ -133,6 +152,18 @@ async function restoreStockBatch(
         where: { storeId, productId: i.productId },
         data: { quantity: { increment: i.quantity } },
       });
+    }
+  }
+
+  // Reverso en lotes (mantiene el invariante total == suma de lotes).
+  for (const item of items) {
+    if (item.asignaciones && item.asignaciones.length > 0) {
+      const restante = await restaurarDeAsignaciones(tx, item.asignaciones, item.quantity);
+      if (restante.gt(0)) {
+        await restaurarLoteGenerico(tx, storeId, item.productId, restante);
+      }
+    } else {
+      await restaurarLoteGenerico(tx, storeId, item.productId, item.quantity);
     }
   }
 }
@@ -200,20 +231,42 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
       }
     }
 
-    // Validación de stock en lote (1 query en vez de N)
-    await validateStockBatch(
-      tx,
-      input.storeId,
-      input.items.map((it) => ({
-        productId: it.productId,
-        quantity: new Prisma.Decimal(it.quantity),
-        name: productMap.get(it.productId)?.name,
-      }))
-    );
+    const isPending = input.status === 'PENDING';
 
-    for (const item of input.items) {
+    // Los pedidos (PENDING) solo validan stock y no reservan lotes; las ventas
+    // inmediatas planean el consumo FEFO antes de crear la venta para poder
+    // guardar el costo real de los lotes que salen.
+    let planes: AsignacionLote[][] | null = null;
+    if (isPending) {
+      await validateStockBatch(
+        tx,
+        input.storeId,
+        input.items.map((it) => ({
+          productId: it.productId,
+          quantity: new Prisma.Decimal(it.quantity),
+          name: productMap.get(it.productId)?.name,
+        }))
+      );
+    } else {
+      planes = await planearConsumoFEFO(
+        tx,
+        input.storeId,
+        input.items.map((it) => ({
+          productId: it.productId,
+          quantity: new Prisma.Decimal(it.quantity),
+          name: productMap.get(it.productId)?.name,
+        }))
+      );
+    }
+
+    for (let i = 0; i < input.items.length; i++) {
+      const item = input.items[i];
       const product = productMap.get(item.productId)!;
-      const costPrice = product.costPrice;
+      // Costo real: promedio ponderado de los lotes que surtirán la línea.
+      // En pedidos (sin consumo) se conserva el costo actual del producto.
+      const costPrice = planes
+        ? costoPromedioPonderado(planes[i])
+        : product.costPrice;
       const unitProfit = new Prisma.Decimal(item.unitPrice).minus(costPrice);
 
       subtotal = subtotal.plus(new Prisma.Decimal(item.unitPrice).mul(item.quantity));
@@ -298,8 +351,6 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
 
     const saleNumber = await generateSaleNumber(tx, input.storeId, store.code);
 
-    const isPending = input.status === 'PENDING';
-
     const sale = await tx.sale.create({
       data: {
         saleNumber,
@@ -321,23 +372,33 @@ export async function createSale(input: CreateSaleInput): Promise<SaleResult> {
         ...(input.paymentMethod === 'CASH' && input.change != null
           ? { change: new Prisma.Decimal(input.change) }
           : {}),
-        items: {
-          create: preparedItems.map((it) => ({
-            productId: it.productId,
-            quantity: it.quantity,
-            unidad: it.unidad,
-            unitPrice: it.unitPrice,
-            originalUnitPrice:
-              it.unitPrice !== it.originalUnitPrice ? it.originalUnitPrice : null,
-            costPrice: it.costPrice,
-            profit: new Prisma.Decimal(it.unitPrice)
-              .minus(it.costPrice)
-              .mul(it.quantity),
-          })),
-        },
       },
-      include: { items: true },
     });
+
+    // Los artículos se crean uno por uno para poder amarrar a cada uno los
+    // lotes que lo surtieron (trazabilidad + costo real).
+    for (let i = 0; i < preparedItems.length; i++) {
+      const it = preparedItems[i];
+      const saleItem = await tx.saleItem.create({
+        data: {
+          saleId: sale.id,
+          productId: it.productId,
+          quantity: it.quantity,
+          unidad: it.unidad,
+          unitPrice: it.unitPrice,
+          originalUnitPrice:
+            it.unitPrice !== it.originalUnitPrice ? it.originalUnitPrice : null,
+          costPrice: it.costPrice,
+          profit: new Prisma.Decimal(it.unitPrice)
+            .minus(it.costPrice)
+            .mul(it.quantity),
+        },
+      });
+
+      if (planes) {
+        await aplicarConsumo(tx, saleItem.id, planes[i]);
+      }
+    }
 
     // Solo las ventas inmediatas (COMPLETED) descuentan inventario. Los
     // pedidos (PENDING) validan stock arriba pero no lo reservan ni descuentan.
@@ -498,7 +559,10 @@ export async function cancelSale(
   return prisma.$transaction(async (tx) => {
     const sale = await tx.sale.findFirst({
       where: { id, storeId, status: 'COMPLETED' },
-      include: { items: true, factura: { select: { id: true, status: true } } },
+      include: {
+        items: { include: { lotAssignments: true } },
+        factura: { select: { id: true, status: true } },
+      },
     });
 
     if (!sale) {
@@ -514,14 +578,31 @@ export async function cancelSale(
     }
 
     // Restore inventory atomically (1-2 queries en vez de N upserts)
-    await restoreStockBatch(
-      tx,
-      storeId,
-      sale.items.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-      }))
-    );
+    // devolviendo cada artículo a los lotes de los que salió. Si hubo
+    // cancelaciones parciales previas solo se devuelve lo que falta, para no
+    // duplicar mercancía.
+    const aRestaurar = sale.items
+      .map((item) => {
+        const yaDevuelto = item.lotAssignments.reduce(
+          (acc, a) => acc.plus(a.restoredQty),
+          new Prisma.Decimal(0)
+        );
+        return {
+          productId: item.productId,
+          quantity: item.quantity.minus(yaDevuelto),
+          asignaciones: item.lotAssignments.map((a) => ({
+            id: a.id,
+            lotId: a.lotId,
+            quantity: a.quantity,
+            restoredQty: a.restoredQty,
+          })),
+        };
+      })
+      .filter((item) => item.quantity.gt(0));
+
+    if (aRestaurar.length > 0) {
+      await restoreStockBatch(tx, storeId, aRestaurar);
+    }
 
     // Revierte promociones aplicadas a la venta (decrementa usesCount).
     await revertPromotionApplicationsForSale(tx, id);
@@ -573,6 +654,65 @@ export async function cancelSale(
   });
 }
 
+// Consume los lotes de un pedido que se confirma y ajusta el costo real de sus
+// líneas. Los pedidos nacen con el costo actual del producto; al confirmarse ya
+// se sabe de qué lote sale cada artículo, así que la utilidad se corrige por la
+// diferencia de costo (el descuento global de la venta no se altera).
+async function consumirLotesDeVentaExistente(
+  tx: Tx,
+  storeId: string,
+  sale: {
+    id: string;
+    profit: Prisma.Decimal;
+    total: Prisma.Decimal;
+    items: {
+      id: string;
+      productId: string;
+      quantity: Prisma.Decimal;
+      unitPrice: Prisma.Decimal;
+      costPrice: Prisma.Decimal;
+    }[];
+  }
+): Promise<void> {
+  const planes = await planearConsumoFEFO(
+    tx,
+    storeId,
+    sale.items.map((item) => ({ productId: item.productId, quantity: item.quantity }))
+  );
+
+  let ajuste = new Prisma.Decimal(0);
+  for (let i = 0; i < sale.items.length; i++) {
+    const item = sale.items[i];
+    const asignaciones = planes[i];
+    const costo = costoPromedioPonderado(asignaciones);
+
+    ajuste = ajuste.plus(item.costPrice.minus(costo).mul(item.quantity));
+
+    await tx.saleItem.update({
+      where: { id: item.id },
+      data: {
+        costPrice: costo,
+        profit: item.unitPrice.minus(costo).mul(item.quantity),
+      },
+    });
+
+    await aplicarConsumo(tx, item.id, asignaciones);
+  }
+
+  if (!ajuste.isZero()) {
+    const nuevaUtilidad = sale.profit.plus(ajuste);
+    await tx.sale.update({
+      where: { id: sale.id },
+      data: {
+        profit: nuevaUtilidad,
+        profitMargin: sale.total.gt(0)
+          ? nuevaUtilidad.div(sale.total).mul(100)
+          : new Prisma.Decimal(0),
+      },
+    });
+  }
+}
+
 // Confirma un pedido (status PENDING): reválida y descuenta inventario de
 // forma atómica, y lo pasa a COMPLETED. Hasta este momento el pedido no
 // afectó el inventario.
@@ -587,15 +727,9 @@ export async function confirmOrder(id: string, storeId: string, userId: string) 
       throw ApiError.notFound('Pedido no encontrado o ya confirmado', 'ORDER_NOT_FOUND');
     }
 
-    // Reválida stock disponible (puede haber cambiado desde la creación).
-    await validateStockBatch(
-      tx,
-      storeId,
-      sale.items.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-      }))
-    );
+    // Reválida stock disponible y consume lotes FEFO (puede haber cambiado
+    // desde la creación del pedido).
+    await consumirLotesDeVentaExistente(tx, storeId, sale);
 
     // Descuenta inventario de forma atómica.
     await decrementStockBatch(
@@ -821,15 +955,8 @@ export async function completeHeldSale(
       throw ApiError.notFound('Pedido en espera no encontrado o ya completado', 'HELD_SALE_NOT_FOUND');
     }
 
-    // Validar stock disponible para cada artículo (1 query en vez de N)
-    await validateStockBatch(
-      tx,
-      storeId,
-      sale.items.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-      }))
-    );
+    // Validar stock disponible y consumir lotes FEFO (1 query por producto)
+    await consumirLotesDeVentaExistente(tx, storeId, sale);
 
     // Descuenta inventario atomically
     await decrementStockBatch(

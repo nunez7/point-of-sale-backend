@@ -5,9 +5,66 @@ import { mexicoStartOfDay, mexicoEndOfDay } from '../utils/dates';
 import { SupplierTxItemInput } from '../types';
 import { createPurchaseMovementsInTx, createSupplierCancelMovementsInTx } from './stockMovement.service';
 import { resolveCajaSession } from './cajaSession.service';
+import { aDecimal, crearLote } from './lot.service';
 
 const PURCHASE_REASON_NAME = 'Compra a proveedor';
 const DEFAULT_MARGIN_PCT = 16;
+
+// Item de compra tal como llega con sus lotes, antes de tocar la base.
+interface LotePreparado {
+  quantity: Prisma.Decimal;
+  unitCost: Prisma.Decimal;
+  expirationDate: string | null;
+  lotCode: string | null;
+}
+
+interface ItemPreparado {
+  productId: string;
+  quantity: Prisma.Decimal;
+  unitCost: Prisma.Decimal;
+  marginPct: Prisma.Decimal;
+  sellingPrice: Prisma.Decimal;
+  lots: LotePreparado[];
+}
+
+// Los Decimal de Prisma se serializan como string en JSON; el frontend espera
+// números. Incluye el desglose de lotes con su caducidad.
+function serializarItemCompra<
+  T extends {
+    quantity: Prisma.Decimal;
+    unitCost: Prisma.Decimal;
+    marginPct: Prisma.Decimal;
+    sellingPrice: Prisma.Decimal | null;
+    lots?: Array<{
+      id: string;
+      lotCode: string | null;
+      expirationDate: Date | null;
+      receivedQty: Prisma.Decimal;
+      availableQty: Prisma.Decimal;
+      unitCost: Prisma.Decimal;
+      status: string;
+    }> | null;
+  },
+>(item: T) {
+  return {
+    ...item,
+    quantity: Number(item.quantity),
+    unitCost: Number(item.unitCost),
+    marginPct: Number(item.marginPct),
+    sellingPrice: item.sellingPrice != null ? Number(item.sellingPrice) : null,
+    lots: (item.lots ?? []).map((lote) => ({
+      id: lote.id,
+      lotCode: lote.lotCode,
+      expirationDate: lote.expirationDate
+        ? lote.expirationDate.toISOString().slice(0, 10)
+        : null,
+      receivedQty: Number(lote.receivedQty),
+      availableQty: Number(lote.availableQty),
+      unitCost: Number(lote.unitCost),
+      status: lote.status,
+    })),
+  };
+}
 
 export interface CreateSupplierInput {
   name: string;
@@ -126,7 +183,10 @@ export async function getSupplierTransactions(supplierId: string, storeId: strin
     where: { supplierId, storeId },
     include: {
       items: {
-        include: { product: true },
+        include: {
+          product: true,
+          lots: { orderBy: { expirationDate: 'asc' } },
+        },
         orderBy: { id: 'asc' },
       },
       user: { select: { id: true, name: true } },
@@ -135,19 +195,11 @@ export async function getSupplierTransactions(supplierId: string, storeId: strin
     orderBy: { createdAt: 'desc' },
   });
 
-  // Los Decimal de Prisma se serializan como string en JSON; el frontend
-  // espera números (p. ej. reduce() para contar artículos).
   return transactions.map((tx) => ({
     ...tx,
     total: Number(tx.total),
     reference: tx.reference,
-    items: tx.items.map((it) => ({
-      ...it,
-      quantity: Number(it.quantity),
-      unitCost: Number(it.unitCost),
-      marginPct: Number(it.marginPct),
-      sellingPrice: it.sellingPrice != null ? Number(it.sellingPrice) : null,
-    })),
+    items: tx.items.map(serializarItemCompra),
   }));
 }
 
@@ -163,7 +215,10 @@ export async function getSupplierTransactionById(
     where: { id, storeId },
     include: {
       items: {
-        include: { product: { select: { id: true, name: true, sku: true, unidadVenta: true } } },
+        include: {
+          product: { select: { id: true, name: true, sku: true, unidadVenta: true } },
+          lots: { orderBy: { expirationDate: 'asc' } },
+        },
         orderBy: { id: 'asc' },
       },
       user: { select: { id: true, name: true } },
@@ -179,11 +234,7 @@ export async function getSupplierTransactionById(
     ...tx,
     total: Number(tx.total),
     items: tx.items.map((it) => ({
-      ...it,
-      quantity: Number(it.quantity),
-      unitCost: Number(it.unitCost),
-      marginPct: Number(it.marginPct),
-      sellingPrice: it.sellingPrice != null ? Number(it.sellingPrice) : null,
+      ...serializarItemCompra(it),
       subtotal: Number(new Prisma.Decimal(it.unitCost.toString()).mul(it.quantity)),
     })),
   };
@@ -208,7 +259,10 @@ export async function listStoreTransactions(
       supplier: { select: { id: true, name: true } },
       user: { select: { id: true, name: true } },
       items: {
-        include: { product: { select: { id: true, name: true, sku: true, unidadVenta: true } } },
+        include: {
+          product: { select: { id: true, name: true, sku: true, unidadVenta: true } },
+          lots: { orderBy: { expirationDate: 'asc' } },
+        },
         orderBy: { id: 'asc' },
       },
       _count: { select: { items: true } },
@@ -220,11 +274,7 @@ export async function listStoreTransactions(
     ...tx,
     total: Number(tx.total),
     items: tx.items.map((it) => ({
-      ...it,
-      quantity: Number(it.quantity),
-      unitCost: Number(it.unitCost),
-      marginPct: Number(it.marginPct),
-      sellingPrice: it.sellingPrice != null ? Number(it.sellingPrice) : null,
+      ...serializarItemCompra(it),
       subtotal: Number(new Prisma.Decimal(it.unitCost.toString()).mul(it.quantity)),
     })),
   }));
@@ -265,13 +315,7 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
     }
 
     let total = new Prisma.Decimal(0);
-    const preparedItems: Array<{
-      productId: string;
-      quantity: number;
-      unitCost: Prisma.Decimal;
-      marginPct: Prisma.Decimal;
-      sellingPrice: Prisma.Decimal;
-    }> = [];
+    const preparedItems: ItemPreparado[] = [];
 
     const productIds = input.items.map((i) => i.productId);
     const products = await tx.product.findMany({
@@ -298,13 +342,52 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
         ? new Prisma.Decimal(item.sellingPrice)
         : suggested;
 
-      total = total.plus(new Prisma.Decimal(item.unitCost).mul(item.quantity));
+      // Lotes: si el usuario capturó fechas de caducidad se respetan tal cual;
+      // si no, la cantidad completa entra como un solo lote sin caducidad
+      // (comportamiento previo, ya no se pierde la fecha de lo que ya había).
+      const lotes: LotePreparado[] =
+        item.lots && item.lots.length > 0
+          ? item.lots.map((lote) => ({
+              quantity: aDecimal(lote.quantity),
+              unitCost:
+                lote.unitCost != null ? aDecimal(lote.unitCost) : aDecimal(item.unitCost),
+              expirationDate: lote.expirationDate ?? null,
+              lotCode: lote.lotCode ?? null,
+            }))
+          : [
+              {
+                quantity: aDecimal(item.quantity),
+                unitCost: aDecimal(item.unitCost),
+                expirationDate: null,
+                lotCode: null,
+              },
+            ];
+
+      const sumaLotes = lotes.reduce(
+        (acc, lote) => acc.plus(lote.quantity),
+        new Prisma.Decimal(0)
+      );
+      if (sumaLotes.minus(aDecimal(item.quantity)).abs().gt(0.0005)) {
+        throw ApiError.badRequest(
+          `La suma de los lotes de "${product.name}" (${Number(sumaLotes)}) no coincide con la cantidad (${item.quantity})`,
+          'LOTES_NO_COINCIDEN'
+        );
+      }
+
+      // El total de la compra se calcula con el costo de cada lote. En el caso
+      // normal (todos heredan el costo de la línea) da exactamente lo mismo
+      // que antes: cantidad x costo unitario.
+      for (const lote of lotes) {
+        total = total.plus(lote.quantity.mul(lote.unitCost));
+      }
+
       preparedItems.push({
         productId: product.id,
-        quantity: item.quantity,
-        unitCost: new Prisma.Decimal(item.unitCost),
+        quantity: aDecimal(item.quantity),
+        unitCost: aDecimal(item.unitCost),
         marginPct,
         sellingPrice,
+        lots: lotes,
       });
     }
 
@@ -326,18 +409,34 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
         paymentMethod: input.paymentMethod as PaymentMethod,
         paidFrom,
         ...(input.cajaSessionId ? { cajaSessionId: input.cajaSessionId } : {}),
-        items: {
-          create: preparedItems.map((it) => ({
-            productId: it.productId,
-            quantity: it.quantity,
-            unitCost: it.unitCost,
-            marginPct: it.marginPct,
-            sellingPrice: it.sellingPrice,
-          })),
-        },
       },
-      include: { items: true },
     });
+
+    // Ítems de la compra y, por cada uno, sus lotes con caducidad propia.
+    for (const it of preparedItems) {
+      const item = await tx.supplierTransactionItem.create({
+        data: {
+          transactionId: transaction.id,
+          productId: it.productId,
+          quantity: it.quantity,
+          unitCost: it.unitCost,
+          marginPct: it.marginPct,
+          sellingPrice: it.sellingPrice,
+        },
+      });
+
+      for (const lote of it.lots) {
+        await crearLote(tx, {
+          storeId: input.storeId,
+          productId: it.productId,
+          quantity: lote.quantity,
+          unitCost: lote.unitCost,
+          expirationDate: lote.expirationDate,
+          lotCode: lote.lotCode,
+          supplierTransactionItemId: item.id,
+        });
+      }
+    }
 
     // Actualiza el costo y el precio de venta sugerido/sobrescrito del producto.
     for (const it of preparedItems) {
@@ -356,7 +455,7 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
       referenceId: transaction.id,
       items: preparedItems.map((it) => ({
         productId: it.productId,
-        quantity: it.quantity,
+        quantity: Number(it.quantity),
         unitCost: it.unitCost,
       })),
     });
@@ -373,6 +472,7 @@ export async function createSupplierTransaction(input: CreateSupplierTxInput) {
           reference,
           total: total.toString(),
           items: input.items.length,
+          lots: preparedItems.reduce((acc, it) => acc + it.lots.length, 0),
           paymentMethod: input.paymentMethod,
         },
       },
@@ -412,6 +512,7 @@ export async function cancelSupplierTransaction(
         productId: item.productId,
         quantity: item.quantity,
         unitCost: item.unitCost,
+        supplierTransactionItemId: item.id,
       })),
     });
 

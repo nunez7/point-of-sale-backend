@@ -4,6 +4,7 @@ import { ApiError } from '../utils/ApiError';
 import { mexicoStartOfDay, mexicoEndOfDay } from '../utils/dates';
 import { createSupplierCancelMovementsInTx } from './stockMovement.service';
 import { requireOpenSession } from './cajaSession.service';
+import { restaurarDeAsignaciones, restaurarLoteGenerico } from './lot.service';
 
 const MAX_CANCELLATION_HOURS = 24;
 
@@ -301,7 +302,12 @@ export async function confirmCancellation(input: ConfirmCancellationInput) {
         const sale = await tx.sale.findFirst({
           where: { id: entityId, storeId },
           include: {
-            items: { include: { product: { select: { name: true } } } },
+            items: {
+              include: {
+                product: { select: { name: true } },
+                lotAssignments: true,
+              },
+            },
             factura: { select: { id: true, status: true } },
           },
         });
@@ -394,6 +400,21 @@ export async function confirmCancellation(input: ConfirmCancellationInput) {
               update: { quantity: { increment: qty } },
             });
 
+            // Y devolverlo a los lotes de los que salió (revirtiendo como
+            // máximo lo que aún no se había devuelto de cada lote).
+            if (saleItem.lotAssignments.length > 0) {
+              const restante = await restaurarDeAsignaciones(
+                tx,
+                saleItem.lotAssignments,
+                qty
+              );
+              if (restante.gt(0)) {
+                await restaurarLoteGenerico(tx, storeId, saleItem.productId, restante);
+              }
+            } else {
+              await restaurarLoteGenerico(tx, storeId, saleItem.productId, qty);
+            }
+
             const itemTotal = qty.mul(saleItem.unitPrice);
             total = total.plus(itemTotal);
 
@@ -450,11 +471,33 @@ export async function confirmCancellation(input: ConfirmCancellationInput) {
         } else {
           // Cancelación total: restaurar todo el inventario y marcar la venta.
           for (const item of sale.items) {
+            // Se devuelve solo lo que aún no se había devuelto (si hubo
+            // cancelaciones parciales previas) para no duplicar mercancía.
+            const yaDevuelto = item.lotAssignments.reduce(
+              (acc, a) => acc.plus(a.restoredQty),
+              new Prisma.Decimal(0)
+            );
+            const porDevolver = item.quantity.minus(yaDevuelto);
+            if (porDevolver.lte(0)) continue;
+
             await tx.inventory.upsert({
               where: { storeId_productId: { storeId, productId: item.productId } },
-              create: { storeId, productId: item.productId, quantity: item.quantity },
-              update: { quantity: { increment: item.quantity } },
+              create: { storeId, productId: item.productId, quantity: porDevolver },
+              update: { quantity: { increment: porDevolver } },
             });
+
+            if (item.lotAssignments.length > 0) {
+              const restante = await restaurarDeAsignaciones(
+                tx,
+                item.lotAssignments,
+                porDevolver
+              );
+              if (restante.gt(0)) {
+                await restaurarLoteGenerico(tx, storeId, item.productId, restante);
+              }
+            } else {
+              await restaurarLoteGenerico(tx, storeId, item.productId, porDevolver);
+            }
           }
 
           await tx.sale.update({
@@ -538,6 +581,7 @@ export async function confirmCancellation(input: ConfirmCancellationInput) {
             productId: i.productId,
             quantity: i.quantity,
             unitCost: i.unitCost,
+            supplierTransactionItemId: i.id,
           })),
         });
 
