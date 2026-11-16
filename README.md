@@ -63,16 +63,16 @@ cp .env.example .env
 
 ```env
 NODE_ENV=development
-PORT=3001
 DATABASE_URL="postgresql://user:password@localhost:5432/punto-venta?schema=public"
 JWT_SECRET="clave-secreta-larga-y-aleatoria"
 JWT_EXPIRES_IN=8h
 CORS_ORIGIN="*"
 DB_POOL_MAX=10
 DB_POOL_IDLE_TIMEOUT=30000
+TIMEZONE=America/Mazatlan
 ```
 
-> **Puerto**: El backend debe correr en **3001**. El frontend espera esta conexión en `NEXT_PUBLIC_API_URL=http://localhost:3001`.
+> **Puerto (solo local)**: `PORT` no forma parte de la configuración de la API; es del listener local (`npm run dev` / `npm start`) y por defecto es **3001**, que es lo que espera el frontend (`NEXT_PUBLIC_API_URL=http://localhost:3001`). `HOST` (opcional) restringe la interfaz de escucha. **En Vercel/serverless no se definen**: la plataforma entrega cada request directamente a la función y el puerto lo administra ella.
 
 ### Base de Datos
 

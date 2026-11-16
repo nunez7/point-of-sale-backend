@@ -3,13 +3,11 @@ import { z } from 'zod';
 
 dotenv.config();
 
+// Variables que la API necesita en CUALQUIER entorno (local y serverless).
+// PORT y HOST no están aquí: son exclusivos del listener local, ver src/config/listen.ts.
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-    PORT: z.coerce.number().default(3001),
-    // Interfaz de escucha. Sin valor = todas las interfaces (comportamiento por defecto de Node).
-    // '127.0.0.1' = solo este equipo; la IP de una interfaz concreta = solo esa red.
-    HOST: z.string().trim().optional(),
     DATABASE_URL: z.string().min(1),
     JWT_SECRET: z.string().min(32, 'JWT_SECRET debe tener al menos 32 caracteres'),
     JWT_EXPIRES_IN: z.string().default('8h'),

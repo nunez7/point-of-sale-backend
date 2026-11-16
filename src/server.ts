@@ -66,6 +66,7 @@ async function iniciarServidorLocal(): Promise<void> {
     const { initSocket } = require('./socket/socket') as typeof import('./socket/socket');
     const { prisma } = require('./config/prisma') as typeof import('./config/prisma');
     const { initScheduler } = require('./services/scheduler.service') as typeof import('./services/scheduler.service');
+    const { opcionesDeEscucha } = require('./config/listen') as typeof import('./config/listen');
 
     if (!appReal) {
       logger.error(
@@ -83,13 +84,15 @@ async function iniciarServidorLocal(): Promise<void> {
     const server = http.createServer(appReal);
     initSocket(server);
 
-    const listenOptions = env.HOST ? { port: env.PORT, host: env.HOST } : { port: env.PORT };
+    const listenOptions = opcionesDeEscucha();
 
     server.listen(listenOptions, () => {
-      logger.info(
-        `🚀 API Punto-Venta corriendo en http://${env.HOST ?? 'localhost'}:${env.PORT}`,
-      );
-      logger.info(`   Health: http://${env.HOST ?? 'localhost'}:${env.PORT}/health`);
+      const direccion = server.address();
+      const puerto = typeof direccion === 'object' && direccion ? direccion.port : listenOptions.port;
+      const host = listenOptions.host ?? 'localhost';
+
+      logger.info(`🚀 API Punto-Venta corriendo en http://${host}:${puerto}`);
+      logger.info(`   Health: http://${host}:${puerto}/health`);
       logger.info(`   CORS permitido: ${env.CORS_ORIGIN}`);
     });
 
