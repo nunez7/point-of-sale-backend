@@ -1,0 +1,3 @@
+marker=5d7fbef
+Este archivo solo existe para comprobar si el deploy de este commit esta vivo.
+Si lo estas leyendo, Vercel sirvio un archivo estatico del commit 5d7fbef.
