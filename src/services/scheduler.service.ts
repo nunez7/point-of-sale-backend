@@ -2,6 +2,7 @@ import cron, { type ScheduledTask } from 'node-cron';
 import { prisma } from '../config/prisma';
 import { emitToStore } from '../socket/socket';
 import { autoCloseStoreSessions, buildCronExpression } from './autoClose.service';
+import { revisarLicencias } from './license.service';
 import { logger } from '../config/logger';
 import { env } from '../config/env';
 
@@ -24,6 +25,8 @@ export async function initScheduler(): Promise<void> {
   }
 
   scheduleExpiredProducts();
+
+  scheduleLicenseCheck();
 
   logger.info(`🕐 Scheduler initialized for ${stores.length} store(s)`);
 }
@@ -146,4 +149,28 @@ export function scheduleExpiredProducts(): void {
   );
 
   logger.info(`[ExpiredProducts] Job programado diariamente a las 08:00 (${TIMEZONE})`);
+}
+
+/**
+ * Revisión diaria de licencias: avisa por socket las que están por vencer y
+ * guarda la transición a GRACE/EXPIRED. No bloquea nada por sí sola; el
+ * bloqueo real lo aplica `assertPuedeAbrirCaja`.
+ */
+export function scheduleLicenseCheck(): void {
+  cron.schedule(
+    '0 9 * * *',
+    async () => {
+      try {
+        const { avisadas, vencidas } = await revisarLicencias();
+        if (avisadas || vencidas) {
+          logger.info(`[Licencias] ${avisadas} por vencer, ${vencidas} vencidas`);
+        }
+      } catch (err) {
+        logger.error('[Licencias] Error al revisar licencias:', err);
+      }
+    },
+    { timezone: TIMEZONE }
+  );
+
+  logger.info(`[Licencias] Job programado diariamente a las 09:00 (${TIMEZONE})`);
 }

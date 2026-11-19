@@ -1,0 +1,4 @@
+﻿# Llaves y códigos emitidos: NUNCA versionar.
+*.pem
+*.b64
+licencia-*.txt

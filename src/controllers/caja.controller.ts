@@ -12,11 +12,15 @@ export const listCajas = asyncAuthHandler(async (req: AuthedRequest, res: Respon
 
 export const createCaja = asyncAuthHandler(async (req: AuthedRequest, res: Response) => {
   const storeId = req.user!.storeId;
-  const caja = await cajaService.createCaja(storeId, {
-    name: req.body.name,
-    assignedUserId: req.body.assignedUserId ?? null,
-    isActive: req.body.isActive,
-  });
+  const caja = await cajaService.createCaja(
+    storeId,
+    {
+      name: req.body.name,
+      assignedUserId: req.body.assignedUserId ?? null,
+      isActive: req.body.isActive,
+    },
+    req.user!.id
+  );
   res.status(201).json({ caja });
 });
 
@@ -24,11 +28,16 @@ export const updateCaja = asyncAuthHandler(async (req: AuthedRequest, res: Respo
   const storeId = req.user!.storeId;
   const id = req.params.id;
   if (!id) throw ApiError.badRequest('El id de la caja es requerido', 'BAD_REQUEST');
-  const caja = await cajaService.updateCaja(id, storeId, {
-    name: req.body.name,
-    assignedUserId: req.body.assignedUserId,
-    isActive: req.body.isActive,
-  });
+  const caja = await cajaService.updateCaja(
+    id,
+    storeId,
+    {
+      name: req.body.name,
+      assignedUserId: req.body.assignedUserId,
+      isActive: req.body.isActive,
+    },
+    req.user!.id
+  );
   res.json({ caja });
 });
 

@@ -17,6 +17,15 @@ const envSchema = z
     DB_POOL_MAX: z.coerce.number().default(10),
     DB_POOL_IDLE_TIMEOUT: z.coerce.number().default(30000),
     TIMEZONE: z.string().default('America/Mazatlan'),
+    // Licenciamiento on-premise. El backend SOLO verifica con la llave pública
+    // (PEM RSA); la llave privada vive en el emisor (tools/emisor-licencias) y
+    // nunca se despliega. Sin llave pública no hay verificación posible y el
+    // modo efectivo es 'off'.
+    LICENCIA_PUBLIC_KEY: z.string().optional(),
+    // off   = no se valida nada (desarrollo local)
+    // soft  = se calcula el estado y se avisa, pero NUNCA se bloquea
+    // hard  = se bloquea la creación/apertura de cajas al vencer
+    LICENCIA_ENFORCEMENT: z.enum(['off', 'soft', 'hard']).default('off'),
   })
   .refine(
     (data) => {

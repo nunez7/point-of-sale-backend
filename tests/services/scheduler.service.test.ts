@@ -78,6 +78,7 @@ describe('initScheduler', () => {
       '30 8 * * 1,2',
       '0 21 * * 0',
       '0 8 * * *',
+      '0 9 * * *',
     ]);
     expect(getScheduledStores()).toEqual(['store-1', 'store-2']);
     expect(h.logger.info).toHaveBeenCalledWith(
@@ -111,7 +112,7 @@ describe('initScheduler', () => {
 
     await initScheduler();
 
-    expect(h.tareas.map((t) => t.expresion)).toEqual(['0 8 * * *']);
+    expect(h.tareas.map((t) => t.expresion)).toEqual(['0 8 * * *', '0 9 * * *']);
     expect(getScheduledStores()).toEqual([]);
     expect(h.logger.info).toHaveBeenCalledWith(
       expect.stringContaining('Scheduler initialized for 0 store(s)')

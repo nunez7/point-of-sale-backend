@@ -7,6 +7,7 @@ import { audit } from '../utils/audit';
 import { mexicoStartOfDay, mexicoLocalDateKey } from '../utils/dates';
 import { registerOpening } from './stockMovement.service';
 import { resumenMovimientos, resumenMovimientosPorMetodo, resumenPorMotivo } from './cajaMovimiento.service';
+import { assertPuedeAbrirCaja } from './license.service';
 
 // Métodos de pago que cuentan como "electrónico" en el corte de caja.
 const ELECTRONIC_METHODS: PaymentMethod[] = [
@@ -53,6 +54,10 @@ export async function openCaja(
   if (!caja.isActive) {
     throw ApiError.badRequest('La caja está inactiva', 'CAJA_INACTIVE');
   }
+
+  // Licenciamiento: la tienda debe tener licencia vigente y esta caja su
+  // licencia operativa (en modo estricto; en modo aviso solo se registra).
+  await assertPuedeAbrirCaja(storeId, cajaId);
 
   // El vendedor solo puede abrir caja con autorización válida de ADMIN/GERENTE.
   // Administradores y gerentes pueden abrir sin token.

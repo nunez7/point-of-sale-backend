@@ -18,6 +18,16 @@ export const idParamSchema = z.object({
   id: z.string().min(1),
 });
 
+// Código de licencia firmado por el creador (JWT RS256 emitido por
+// tools/emisor-licencias). Se valida la firma en el servicio.
+export const licenciaActivarSchema = z.object({
+  token: z
+    .string()
+    .trim()
+    .min(20, 'El código de licencia es inválido')
+    .max(4096, 'El código de licencia es demasiado largo'),
+});
+
 export const paymentMethodSchema = z.enum(
   Object.values(PaymentMethod) as [string, ...string[]]
 );

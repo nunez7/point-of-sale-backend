@@ -91,6 +91,20 @@ enum TicketPriority {
   @@map("ticket_priority")
 }
 
+// Estado de una licencia comercial u operativa. El estado que se muestra y se
+// aplica SIEMPRE se recalcula contra la fecha efectiva del servidor (ver
+// src/services/license.service.ts): la fila en DB solo guarda el Ãºltimo estado
+// conocido para auditorÃ­a.
+enum LicenseStatus {
+  ACTIVE
+  GRACE
+  EXPIRED
+  SUSPENDED
+  REVOKED
+
+  @@map("license_status")
+}
+
 enum TicketModule {
   INVENTORY
   SALES
@@ -205,6 +219,8 @@ model Store {
   ticketConfigs   TicketConfig[]
   cotizaciones    Cotizacion[]
   inventoryLots   InventoryLot[]
+  storeLicense    StoreLicense?
+  licenseEvents   LicenseEvent[]
 
   @@map("store")
 }
@@ -854,6 +870,7 @@ model Caja {
   updatedAt      DateTime @updatedAt
 
   sessions       CajaSession[]
+  license        CajaLicense?
 
   @@unique([storeId, name])
   @@index([storeId])
@@ -1164,4 +1181,105 @@ model TicketConfig {
   updatedAt    DateTime @updatedAt
 
   @@map("ticket_config")
+}
+// ===========================================================================
+// Licenciamiento
+// ===========================================================================
+// El sistema se vende por tienda, con cobro mensual o anual. Como la
+// instalación es on-premise (el cliente es dueño de la base de datos), la
+// autoridad NO es una fecha editable aquí: es el token firmado que se genera
+// con la llave privada del creador y que el backend solo verifica con la llave
+// pública. Estas tablas guardan la copia local de ese token y su historial.
+
+// Instalación física (una por servidor). Su id es el "código de instalación"
+// que el cliente manda para que se le emita la licencia, y viaja dentro del
+// token para que copiar la carpeta o la base de datos a otro equipo no sirva.
+model Installation {
+  id           String    @id @default(uuid())
+  // Huella opcional del equipo (aviso, no bloqueo: un VM migrado no debe romper).
+  machineId    String?
+  installedAt  DateTime  @default(now())
+  // Última fecha vista por la app. Se usa como "fecha efectiva" del servidor
+  // para que atrasar el reloj no alargue la licencia.
+  lastSeenAt   DateTime?
+  // Último token aceptado (copia para revalidar y para auditoría).
+  licenseToken String?   @db.Text
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("installation")
+}
+
+// Licencia comercial anual o mensual de una tienda.
+model StoreLicense {
+  id            String        @id @default(uuid())
+  storeId       String        @unique
+  store         Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  // Folio de la licencia emitida por el creador (identifica la venta).
+  folio         String?
+  plan          String        @default("PRO")
+  // Cuántas cajas pueden operar con licencia operativa en esta tienda.
+  maxCajas      Int           @default(1)
+  // Razón social / RFC del cliente, solo informativo.
+  issuedTo      String?
+  startsAt      DateTime
+  expiresAt     DateTime
+  graceDays     Int           @default(15)
+  status        LicenseStatus @default(ACTIVE)
+  // Token firmado aceptado (copia) y su hash para detectar duplicados.
+  token         String?       @db.Text
+  tokenHash     String?
+  activatedAt   DateTime?
+  activatedById String?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  cajas  CajaLicense[]
+  events LicenseEvent[]
+
+  @@index([expiresAt])
+  @@index([status])
+  @@map("store_license")
+}
+
+// Licencia operativa de una caja concreta: sin ella la caja no puede abrir
+// turno. Se crean automáticamente hasta `StoreLicense.maxCajas`.
+model CajaLicense {
+  id             String        @id @default(uuid())
+  storeId        String
+  storeLicenseId String
+  storeLicense   StoreLicense  @relation(fields: [storeLicenseId], references: [id], onDelete: Cascade)
+  cajaId         String        @unique
+  caja           Caja          @relation(fields: [cajaId], references: [id], onDelete: Cascade)
+  expiresAt      DateTime
+  status         LicenseStatus @default(ACTIVE)
+  activatedAt    DateTime      @default(now())
+  activatedById  String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([storeId])
+  @@index([storeLicenseId])
+  @@map("caja_license")
+}
+
+// Historial de activaciones, renovaciones, vencimientos y token inválidos.
+model LicenseEvent {
+  id             String        @id @default(uuid())
+  storeId        String?
+  store          Store?        @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  storeLicenseId String?
+  storeLicense   StoreLicense? @relation(fields: [storeLicenseId], references: [id], onDelete: SetNull)
+  tipo           String
+  mensaje        String?
+  metadata       Json?
+  userId         String?
+  createdAt      DateTime      @default(now())
+
+  @@index([storeLicenseId, createdAt])
+  @@index([storeId, createdAt])
+  @@index([tipo])
+
+  @@map("license_event")
 }
