@@ -1,5 +1,6 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { prisma } from '../config/prisma';
+import { emitToStore } from '../socket/socket';
 import { autoCloseStoreSessions, buildCronExpression } from './autoClose.service';
 import { logger } from '../config/logger';
 import { env } from '../config/env';
@@ -125,9 +126,6 @@ export function scheduleExpiredProducts(): void {
         }
 
         for (const [storeId, detalle] of porTienda) {
-          // Lazy require to avoid circular dependency with socket.ts.
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const { emitToStore } = require('../socket/socket');
           emitToStore(storeId, 'inventory:expiration-alert', {
             storeId,
             dias,

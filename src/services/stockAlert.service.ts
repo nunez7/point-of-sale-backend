@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma';
+import { emitToStore } from '../socket/socket';
 
 export type StockAlertType = 'OUT_OF_STOCK' | 'LOW_STOCK' | 'EXPIRING_SOON';
 
@@ -74,9 +75,6 @@ export async function checkStockAlert(
     at: new Date().toISOString(),
   };
 
-  // Lazy require para evitar dependencia circular con socket.ts.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { emitToStore } = require('../socket/socket');
   emitToStore(storeId, 'inventory:alert', payload);
 }
 

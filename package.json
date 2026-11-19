@@ -9,7 +9,11 @@
     "prebuild": "node scripts/ensure-prisma-client.cjs",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc -p tsconfig.test.json",
     "pretypecheck": "node scripts/ensure-prisma-client.cjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "postinstall": "node scripts/ensure-prisma-client.cjs",
     "prisma:generate": "prisma generate && tsc -p tsconfig.generated.json && node scripts/clean-generated.cjs",
     "prisma:migrate": "prisma migrate dev",
@@ -59,8 +63,10 @@
     "@types/multer": "^2.2.0",
     "@types/node": "^20.14.10",
     "@types/xlsx": "^0.0.35",
+    "@vitest/coverage-v8": "^4.1.12",
     "prisma": "^7.10.0",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.5.3"
+    "typescript": "^5.5.3",
+    "vitest": "^4.1.12"
   }
 }

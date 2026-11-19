@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma';
+import { emitToStore } from '../socket/socket';
 import { Prisma } from '../../generated/prisma/client.js';
 
 export interface InventoryFilters {
@@ -133,8 +134,5 @@ export async function getLowStock(storeId: string) {
 }
 
 export function emitInventoryEvent(storeId: string, data: unknown): void {
-  // imported lazily to avoid circular dependency issues
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { emitToStore } = require('../socket/socket');
   emitToStore(storeId, 'inventory:updated', data);
 }

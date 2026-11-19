@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma';
+import { emitToStore } from '../socket/socket';
 import { Prisma } from '../../generated/prisma/client.js';
 import { resumenMovimientos } from './cajaMovimiento.service';
 
@@ -163,7 +164,6 @@ export async function checkAndEmitCajaAlert(
     },
   });
 
-  const { emitToStore } = require('../socket/socket');
   emitToStore(storeId, 'caja:alert', payload);
 
   return payload;

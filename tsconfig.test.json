@@ -1,0 +1,13 @@
+{
+  // tsconfig exclusivo para revisar los tipos de la suite. El tsconfig.json de
+  // producción tiene rootDir "src", así que incluir tests/ ahí rompería el build.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.mts"]
+}
