@@ -22,6 +22,11 @@ export default defineConfig({
       JWT_EXPIRES_IN: '8h',
       CORS_ORIGIN: '*',
       TIMEZONE: 'America/Mazatlan',
+      // Licenciamiento apagado por defecto: el .env del desarrollador puede estar en 'hard'
+      // (pruebas e2e) y eso no debe activar el gating en la suite. Los tests de licencia
+      // ajustan `env` directamente para probar cada modo.
+      LICENCIA_PUBLIC_KEY: '',
+      LICENCIA_ENFORCEMENT: 'off',
     },
     coverage: {
       provider: 'v8',

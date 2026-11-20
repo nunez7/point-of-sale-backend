@@ -43,7 +43,9 @@ LICENCIA_ENFORCEMENT=hard
 ## 3. Emitir una licencia
 
 El cliente te manda el **código de instalación** que aparece en
-**Configuraciones → Licencias** (formato `SVCJ-INST-XXXX-XXXX-XXXX-XXXX`).
+**Licencias** (menú lateral, `/licencias`) en la tarjeta *Código de instalación*
+(formato `SVCJ-INST-XXXX-XXXX-XXXX-XXXX`). No se genera a mano: lo deriva el
+backend del identificador de la instalación.
 
 ```bash
 # Anual, 1 tienda, 2 cajas
